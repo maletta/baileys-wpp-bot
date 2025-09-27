@@ -1,0 +1,50 @@
+---
+description: Regras para desenvolvimento de componentes React/Next.js
+globs: "apps/frontend/**/*.{tsx,ts}"
+---
+
+# Componentes React/Next.js
+
+- Componentes funcionais com TypeScript (interfaces Props explícitas)
+- Hooks customizados para lógica de estado complexa
+- Nomes: arquivos em PascalCase para componentes, hooks em useNome.ts
+- Estilos: Tailwind CSS + Shadcn/UI como padrão
+- Server Components quando possível (App Router Next.js)
+
+# Estrutura de Componentes
+
+- `/components/ui` - Componentes base do Shadcn/UI
+- `/components/shared` - Componentes reutilizáveis
+- `/components/forms` - Formulários específicos
+- `/app` - Pages e layouts (App Router)
+
+# Boas Práticas
+
+- Evitar estado global desnecessário, preferir Context API quando necessário
+- useEffect com dependências exaustivas; memoização quando necessário
+- Separar UI de lógica (hooks + componentes "presentacionais")
+- Validação com React Hook Form + Zod
+- Responsividade mobile-first com Tailwind
+- Acessibilidade sempre considerada
+
+# Gerenciamento de Estado
+
+- Context API para estados globais (usuário, grupos, conexões)
+- Hooks customizados para encapsular lógica complexa
+- State local com useState para estados simples
+- useReducer para estados complexos com múltiplas ações
+
+# Formulários e Validação
+
+- React Hook Form como padrão
+- Zod para schemas de validação
+- Componentes de input reutilizáveis
+- Tratamento de erros consistente
+- Loading states e feedback visual
+
+# Socket.IO e Comunicação
+
+- Context API para gerenciar conexões Socket.IO
+- Hooks para escutar eventos específicos
+- Reconexão automática e tratamento de erros
+- Estados de conexão (conectando, conectado, desconectado)

@@ -1,0 +1,71 @@
+---
+description: Regras para backend Node.js/TypeScript com Baileys
+globs: "apps/backend/**/*.{ts,js}"
+---
+
+# Arquitetura Backend
+
+- **PRIORIZAR POO e Classes** ao invés de paradigma funcional
+- Arquitetura em camadas: Domain, Application, Infrastructure
+- Padrões SOLID obrigatórios
+- Injeção de dependência quando apropriado
+- DTOs para comunicação entre camadas
+
+# Estrutura de Pastas
+
+- `/src/domain` - Entidades, Value Objects, Interfaces
+- `/src/application` - Casos de Uso, Services, DTOs
+- `/src/infrastructure` - Repositórios, External APIs, Database
+- `/src/presentation` - Controllers, Routes, Middlewares
+- `/src/shared` - Utilities, Constants, Helpers
+
+# Baileys WhatsApp Socket
+
+- Classe principal BaileysSocketManager para gerenciar conexões
+- Configurações: versão mais recente, logger, cache, high quality preview
+- Eventos: entrada/saída de grupos, mudanças de admin, mensagens
+- Armazenamento seguro de credenciais em arquivos
+- Reconexão automática e tratamento de falhas
+
+# Erros e Logs
+
+- Classes de erro personalizadas para diferentes tipos
+- Logs estruturados com níveis (info/warn/error/debug)
+- Middlewares de tratamento de erro centralizados
+- Nunca silenciar erros, sempre propagar adequadamente
+- Winston ou similar para logging
+
+# Database e Prisma
+
+- Prisma ORM como padrão
+- PostgreSQL para dados relacionais
+- MongoDB para mensagens (via Baileys getMessage)
+- Migrations versionadas
+- Seeds para dados iniciais
+- Connection pooling configurado
+
+# Autenticação e Segurança
+
+- JWT para autenticação de usuários
+- Google OAuth obrigatório para login
+- Middleware de validação de token em todas as rotas protegidas
+- Validação de participantes em grupos
+- Rate limiting nas rotas públicas
+- Sanitização de inputs
+
+# APIs e Routes
+
+- Padrão RESTful obrigatório
+- Versionamento de API (v1, v2)
+- Documentação com Swagger/OpenAPI
+- Validação de entrada com Zod ou similar
+- Responses padronizados (success/error)
+- HTTP status codes apropriados
+
+# Socket.IO
+
+- Namespace separado para diferentes tipos de conexão
+- Autenticação via JWT nos sockets
+- Eventos tipados com TypeScript
+- Broadcast para múltiplos clientes quando necessário
+- Tratamento de reconexão

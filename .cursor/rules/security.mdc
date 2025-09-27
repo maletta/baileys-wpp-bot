@@ -1,0 +1,61 @@
+---
+description: Guardrails de segurança para o projeto
+globs: "**/*"
+---
+
+# Segurança Geral
+
+- NUNCA commitar credenciais, tokens ou senhas
+- Variáveis de ambiente para todas as configurações sensíveis
+- Validação rigorosa de todos os inputs
+- Sanitização de dados antes de persistir
+- Rate limiting em todas as rotas públicas
+
+# Autenticação e Autorização
+
+- JWT com expiração adequada
+- Refresh tokens quando necessário
+- Validação de roles e permissões
+- Google OAuth como única forma de login
+- Logout seguro com invalidação de tokens
+
+# Database Security
+
+- Prepared statements (Prisma já fornece)
+- Princípio do menor privilégio para usuários DB
+- Backup e encryption at rest
+- Logs de auditoria para operações críticas
+- Connection strings seguras
+
+# WhatsApp/Baileys Security
+
+- Credenciais de sessão armazenadas com segurança
+- Validação de números de telefone
+- Rate limiting para envio de mensagens
+- Logs de todas as interações importantes
+- Validação de participantes em grupos
+
+# Comandos Perigosos Bloqueados
+
+- Evitar `eval()` ou `Function()` constructor
+- Sanitizar uploads de arquivos
+- Validar tipos MIME de imagens
+- Limitar tamanho de uploads
+- Escanear uploads para malware quando possível
+
+# Monitoramento
+
+- Logs estruturados para auditoria
+- Alertas para tentativas de acesso suspeitas
+- Monitoramento de performance
+- Health checks para serviços críticos
+
+# Environment Variables Obrigatórias
+
+- DATABASE_URL
+- JWT_SECRET
+- GOOGLE_CLIENT_ID
+- GOOGLE_CLIENT_SECRET
+- FIREBASE_CONFIG
+- MONGODB_URL (para mensagens)
+- SESSION_PATH (para credenciais Baileys)

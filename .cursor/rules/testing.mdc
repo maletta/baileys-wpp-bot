@@ -1,0 +1,43 @@
+---
+description: Estratégia de testes para backend e frontend
+globs: "**/*"
+---
+
+# Estratégia de Testes
+
+- Cobertura alvo: 80%+ para backend, 70%+ para frontend
+- Pirâmide de testes: Unit > Integration > E2E
+- TDD quando apropriado para lógica complexa
+- Mocks para I/O pesado e APIs externas
+
+# Backend Testing
+
+- Jest + Supertest para testes de API
+- Mocks para Baileys Socket e Firebase
+- Testes de repository com banco em memória
+- Testes de casos de uso isolados
+- Testes de integração com Prisma
+
+# Frontend Testing
+
+- Jest + React Testing Library
+- Testes de componentes isolados
+- Mocks para Context API e hooks
+- Testes de formulários e validação
+- Cypress para E2E críticos
+
+# Configuração
+
+- Setup de banco de dados para testes
+- Fixtures para dados de teste
+- Helpers para mocks comuns
+- CI/CD com validação de testes
+- Coverage reports
+
+# Padrões
+
+- Nomes descritivos para testes
+- AAA (Arrange, Act, Assert)
+- Um conceito por teste
+- Cleanup após cada teste
+- Testes determinísticos

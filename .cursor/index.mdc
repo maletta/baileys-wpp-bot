@@ -1,0 +1,61 @@
+---
+description: Regras principais do projeto WhatsApp Baileys (sempre ativas)
+globs: "**/*"
+---
+
+# Contexto do Projeto
+
+- Stack: Node.js v22.20.0 LTS, TypeScript, Next.js, Baileys v7.0.0, Prisma, PostgreSQL, MongoDB
+- Objetivo: Sistema de gerenciamento de conexões WhatsApp com frontend para administração de grupos, participantes e mensagens anônimas com aprovação
+- Arquitetura: Monorepo com backend Node.js/TypeScript e frontend Next.js
+
+# Padrões Gerais
+
+- Seguir `STYLEGUIDE.md` e `TESTING.md`
+- **PRIORIZAR POO e Classes ao invés de paradigma funcional**
+- Tipagem estrita em TypeScript; evitar any/unknown quando possível, mas permitir para bibliotecas socket se necessário
+- Padrão camelCase para todas as colunas de banco de dados
+- Arquitetura SOLID com separação em camadas (domínios, serviços, casos de uso, repositórios)
+- Padrão RESTful para todas as rotas HTTP
+
+# Estrutura do Projeto
+
+- `/apps/backend` - API Node.js com Baileys, Prisma, Socket.IO
+- `/apps/frontend` - Interface Next.js com Shadcn/UI, Tailwind, Zod
+- `/docs` - Documentação completa do projeto
+- `/specs` - Especificações e templates
+
+# Tecnologias Principais Backend
+
+- Baileys WhatsApp Socket v7.0.0
+- Prisma ORM com PostgreSQL
+- Socket.IO para comunicação real-time
+- JWT para autenticação
+- Google OAuth para login
+- Firebase para upload de imagens
+- MongoDB para armazenamento de mensagens
+
+# Tecnologias Principais Frontend
+
+- Next.js com TypeScript
+- Shadcn/UI + Tailwind CSS
+- React Hook Form + Zod para validação
+- Context API para gerenciamento de estado
+- Socket.IO Client
+- Axios para requisições HTTP
+
+# Regras de Negócio
+
+- Apenas perfil high level admin pode gerenciar conexões Baileys
+- Autenticação obrigatória via Google OAuth
+- Validação de participantes em grupos via tokens de 6 dígitos
+- Mensagens anônimas requerem aprovação de admins do grupo
+- Sincronização automática de grupos e participantes com Baileys
+
+# Referências Úteis
+
+- @docs/overview.md
+- @docs/architecture.md
+- @docs/decisions/ADR-0001.md
+- @apps/backend/README.md
+- @apps/frontend/README.md

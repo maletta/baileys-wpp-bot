@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  HIGH_LEVEL_ADMIN
+  GROUP_ADMIN
+  MEMBER
+  DEVELOPER
+}
+
+enum TokenType {
+  PARTICIPANT_REGISTER_TOKEN
+  PARTICIPANT_ON_GROUP_TOKEN
+}
+
+model User {
+  id             String   @id @default(cuid())
+  googleId       String   @unique
+  email          String   @unique
+  displayName    String?
+  profilePicture String?
+  role           UserRole @default(MEMBER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relacionamentos
+  participantLinks          ParticipantUserLink[]
+  participantRegisterTokens ParticipantRegisterToken[]
+  anonymousMessagesApproved AnonymousMessage[]         @relation("ApprovedByUser")
+  qrCodeTries               QrCodeTry[]
+
+  @@map("users")
+}
+
+model ParticipantsWpp {
+  id               String   @id @default(cuid())
+  whatsappRegistry String   @unique
+  cellphone        String
+  infoName         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relacionamentos
+  groupParticipations        ParticipantGroupWpp[]
+  userLinks                  ParticipantUserLink[]
+  registerTokens             ParticipantRegisterToken[]
+  forms                      ParticipantForm[]
+  anonymousMessagesMentioned AnonymousMessageParticipant[]
+
+  @@map("participants_wpp")
+}
+
+model GroupsWpp {
+  id                     String   @id @default(cuid())
+  whatsappRegistry       String   @unique
+  name                   String
+  linkedParent           String?
+  imageUrl               String?
+  notifyNewUserDetail    Boolean  @default(true)
+  onlyRegisteredUserMode Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  // Relacionamentos
+  participants      ParticipantGroupWpp[]
+  anonymousMessages AnonymousMessage[]
+
+  @@map("groups_wpp")
+}
+
+model ParticipantGroupWpp {
+  id               String    @id @default(cuid())
+  idGroupWpp       String
+  idParticipantWpp String
+  name             String?
+  linkedParent     String?
+  admin            Boolean   @default(false)
+  deleted          Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  removedAt        DateTime?
+
+  // Relacionamentos
+  group       GroupsWpp       @relation(fields: [idGroupWpp], references: [id])
+  participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id])
+
+  @@unique([idGroupWpp, idParticipantWpp])
+  @@map("participant_group_wpp")
+}
+
+model ParticipantUserLink {
+  id            String   @id @default(cuid())
+  idUser        String
+  idParticipant String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  // Relacionamentos
+  user        User            @relation(fields: [idUser], references: [id])
+  participant ParticipantsWpp @relation(fields: [idParticipant], references: [id])
+
+  @@map("participant_user_links")
+}
+
+model ParticipantRegisterToken {
+  id            String    @id @default(cuid())
+  idUser        String
+  idParticipant String
+  type          TokenType
+  token         String
+  consumed      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+
+  // Relacionamentos
+  user        User            @relation(fields: [idUser], references: [id])
+  participant ParticipantsWpp @relation(fields: [idParticipant], references: [id])
+
+  @@map("participant_register_tokens")
+}
+
+model ParticipantForm {
+  id                String   @id @default(cuid())
+  idParticipantWpp  String
+  name              String
+  pronoun           String
+  relationship      String
+  birthday          DateTime
+  location          String
+  sexualOrientation String
+  instagram         String?
+  photoUrl          String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relacionamentos
+  participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id])
+
+  @@map("participant_forms")
+}
+
+model AnonymousMessage {
+  id         String    @id @default(cuid())
+  groupId    String
+  message    String
+  approved   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  sentAt     DateTime?
+  approvedAt DateTime?
+  approvedBy String?
+
+  // Relacionamentos
+  group                 GroupsWpp                     @relation(fields: [groupId], references: [id])
+  approvedByUser        User?                         @relation("ApprovedByUser", fields: [approvedBy], references: [id])
+  mentionedParticipants AnonymousMessageParticipant[]
+
+  @@map("anonymous_messages")
+}
+
+model AnonymousMessageParticipant {
+  id            String @id @default(cuid())
+  messageId     String
+  participantId String
+
+  // Relacionamentos
+  message     AnonymousMessage @relation(fields: [messageId], references: [id])
+  participant ParticipantsWpp  @relation(fields: [participantId], references: [id])
+
+  @@unique([messageId, participantId])
+  @@map("anonymous_message_participants")
+}
+
+model QrCodeTry {
+  id        String   @id @default(cuid())
+  userId    String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  // Relacionamentos
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("qr_code_tries")
+}

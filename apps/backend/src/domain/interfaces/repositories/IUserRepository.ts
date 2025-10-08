@@ -18,6 +18,7 @@ export interface CreateUserData {
 }
 
 export interface UpdateUserData {
+  googleId?: string;
   displayName?: string;
   profilePicture?: string;
   role?: string;

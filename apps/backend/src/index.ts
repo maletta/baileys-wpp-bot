@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import { PrismaClient } from '@prisma/client';
@@ -17,6 +18,7 @@ import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
 import { AuthMiddleware } from '@/presentation/middlewares/authMiddleware';
+import { createAuthRoutes } from '@/presentation/routes/authRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
@@ -43,7 +45,7 @@ class App {
     this.server = createServer(this.express);
     this.io = new Server(this.server, {
       cors: {
-        origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+        origin: process.env.CORS_ORIGIN || "http://localhost:3333",
         methods: ["GET", "POST"]
       }
     });
@@ -98,7 +100,7 @@ class App {
     // Security middlewares
     this.express.use(helmet());
     this.express.use(cors({
-      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+      origin: process.env.CORS_ORIGIN || "http://localhost:3333",
       credentials: true
     }));
 
@@ -110,6 +112,9 @@ class App {
     // Body parsing
     this.express.use(express.json({ limit: '10mb' }));
     this.express.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+    // Cookie parsing
+    this.express.use(cookieParser());
   }
 
   private initializeRoutes(): void {
@@ -117,6 +122,9 @@ class App {
     this.express.get('/health', (req, res) => {
       res.json({ status: 'OK', timestamp: new Date().toISOString() });
     });
+
+    // Auth routes
+    this.express.use('/api/auth', createAuthRoutes(this.prisma));
 
     // Session routes
     this.express.post('/api/session/create-qr-code',

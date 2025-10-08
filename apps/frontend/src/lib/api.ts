@@ -3,6 +3,7 @@ import { storage } from '@/lib/utils';
 import type {
   ApiResponse,
   AuthResponse,
+  User,
   ConnectionState,
   QrCodeResponse,
   Group,
@@ -69,6 +70,11 @@ class ApiClient {
     const response = await this.client.post<ApiResponse<AuthResponse>>('/auth/google', {
       token
     });
+    return response.data.data!;
+  }
+
+  async getProfile(): Promise<{ user: User }> {
+    const response = await this.client.get<ApiResponse<{ user: User }>>('/auth/profile');
     return response.data.data!;
   }
 

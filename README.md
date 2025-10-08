@@ -155,15 +155,15 @@ SESSION_PATH="./sessions"
 BAILEYS_BROWSER_NAME="Chrome"
 
 # Server
-PORT=3001
-CORS_ORIGIN="http://localhost:3000"
+PORT=4444
+CORS_ORIGIN="http://localhost:3333"
 ```
 
 ### Frontend Environment (.env.local)
 
 ```bash
-NEXT_PUBLIC_API_URL="http://localhost:3001/api"
-NEXT_PUBLIC_SOCKET_URL="http://localhost:3001"
+NEXT_PUBLIC_API_URL="http://localhost:4444/api"
+NEXT_PUBLIC_SOCKET_URL="http://localhost:4444"
 NEXT_PUBLIC_GOOGLE_CLIENT_ID="your-google-client-id"
 ```
 
@@ -176,8 +176,8 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID="your-google-client-id"
 npm run dev
 
 # Executar separadamente
-npm run dev:backend   # API na porta 3001
-npm run dev:frontend  # Interface na porta 3000
+npm run dev:backend   # API na porta 4444
+npm run dev:frontend  # Interface na porta 3333
 ```
 
 ### Produção

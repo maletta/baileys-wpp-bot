@@ -83,21 +83,33 @@ function SettingsContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20">
+          {/* Perfil - Mobile First: vertical em mobile, horizontal em desktop */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Avatar - menor em mobile */}
+            <Avatar className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 mx-auto sm:mx-0">
               <AvatarImage src={user?.profilePicture || ''} alt={user?.displayName || ''} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xl sm:text-2xl">
                 {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1 space-y-2">
-              <h3 className="text-xl font-semibold">{user?.displayName || 'Usuário'}</h3>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
-              <Badge variant={getRoleBadgeVariant(user?.role || '')}>
-                {getRoleLabel(user?.role || '')}
-              </Badge>
+
+            {/* Info - centralizada em mobile, alinhada à esquerda em desktop */}
+            <div className="flex-1 space-y-2 text-center sm:text-left">
+              <h3 className="text-lg sm:text-xl font-semibold truncate">
+                {user?.displayName || 'Usuário'}
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                {user?.email}
+              </p>
+              <div className="flex justify-center sm:justify-start">
+                <Badge variant={getRoleBadgeVariant(user?.role || '')} className="text-xs">
+                  {getRoleLabel(user?.role || '')}
+                </Badge>
+              </div>
             </div>
-            <Button variant="outline">
+
+            {/* Botão - full-width em mobile, auto em desktop */}
+            <Button variant="outline" className="w-full sm:w-auto shrink-0">
               Editar Perfil
             </Button>
           </div>
@@ -159,17 +171,18 @@ function SettingsContent() {
           ].map((notification, index) => (
             <div
               key={index}
-              className="flex items-center justify-between p-4 rounded-lg border"
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border"
             >
-              <div className="space-y-1">
-                <p className="font-medium">{notification.title}</p>
-                <p className="text-sm text-muted-foreground">
+              <div className="space-y-1 flex-1 min-w-0">
+                <p className="font-medium text-sm sm:text-base">{notification.title}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {notification.description}
                 </p>
               </div>
               <Button
                 variant={notification.enabled ? 'default' : 'outline'}
                 size="sm"
+                className="w-full sm:w-auto shrink-0"
               >
                 {notification.enabled ? 'Ativado' : 'Desativado'}
               </Button>
@@ -190,39 +203,39 @@ function SettingsContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg border">
-            <div className="space-y-1">
-              <p className="font-medium">Autenticação de Dois Fatores</p>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border">
+            <div className="space-y-1 flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Autenticação de Dois Fatores</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Adicione uma camada extra de segurança
               </p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto shrink-0">
               <Key className="h-4 w-4" />
               Configurar
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-lg border">
-            <div className="space-y-1">
-              <p className="font-medium">Sessões Ativas</p>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border">
+            <div className="space-y-1 flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Sessões Ativas</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 2 dispositivos conectados
               </p>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto shrink-0">
               Gerenciar
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-lg border">
-            <div className="space-y-1">
-              <p className="font-medium">Histórico de Atividades</p>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border">
+            <div className="space-y-1 flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Histórico de Atividades</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Visualize seu histórico de login
               </p>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto shrink-0">
               Ver Histórico
             </Button>
           </div>

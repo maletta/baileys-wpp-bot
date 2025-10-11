@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { cn } from '@/lib/utils';
@@ -10,41 +10,65 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Estado para desktop: colapsar sidebar
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+
+  // Estado para mobile: abrir/fechar drawer
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Callbacks memoizados para evitar re-renders desnecessários
+  const handleDesktopToggle = useCallback(() => {
+    setDesktopCollapsed(prev => !prev);
+  }, []);
+
+  const handleMobileClose = useCallback(() => {
+    setMobileMenuOpen(false);
+  }, []);
+
+  const handleMobileToggle = useCallback(() => {
+    setMobileMenuOpen(prev => !prev);
+  }, []);
 
   // Prevenir scroll do body quando menu mobile está aberto
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     }
 
-    // Cleanup
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Sidebar - comportamento diferente em mobile e desktop */}
       <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        desktopCollapsed={desktopCollapsed}
+        onDesktopToggle={handleDesktopToggle}
         mobileOpen={mobileMenuOpen}
-        onMobileClose={() => setMobileMenuOpen(false)}
-      />
-      <Header
-        sidebarCollapsed={sidebarCollapsed}
-        onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+        onMobileClose={handleMobileClose}
       />
 
+      {/* Header - se ajusta ao estado da sidebar */}
+      <Header
+        desktopCollapsed={desktopCollapsed}
+        onMobileMenuToggle={handleMobileToggle}
+      />
+
+      {/* Main Content */}
       <main
         className={cn(
-          "pt-16 transition-all duration-300",
-          "lg:ml-64", // Desktop: always show sidebar space
-          sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
+          // === BASE (Mobile First) ===
+          // Em mobile, ocupa toda a largura, apenas padding-top para header
+          "pt-16 min-h-screen",
+
+          // === DESKTOP (>= lg) ===
+          // Margem esquerda para acomodar sidebar
+          "lg:transition-all lg:duration-300",
+          desktopCollapsed ? "lg:ml-16" : "lg:ml-64"
         )}
       >
         <div className="container mx-auto p-4 lg:p-6">

@@ -17,11 +17,13 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
 interface HeaderProps {
-  sidebarCollapsed: boolean;
-  onMobileMenuToggle?: () => void;
+  /** Estado de colapso do sidebar desktop */
+  desktopCollapsed: boolean;
+  /** Callback para abrir menu mobile */
+  onMobileMenuToggle: () => void;
 }
 
-export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
+export function Header({ desktopCollapsed, onMobileMenuToggle }: HeaderProps) {
   const { user, logout } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
 
@@ -69,39 +71,46 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
   return (
     <header
       className={cn(
-        "fixed top-0 right-0 h-16 bg-white/80 backdrop-blur-sm border-b border-border transition-all duration-300",
-        "z-40 lg:z-30", // Mobile: abaixo da sidebar, Desktop: acima do conteúdo
-        "left-0 lg:left-64", // Mobile: full width, Desktop: respect sidebar
-        sidebarCollapsed ? "lg:left-16" : "lg:left-64"
+        // === BASE (Mobile First) ===
+        "fixed top-0 left-0 right-0 h-16",
+        "bg-white/80 backdrop-blur-sm border-b border-border",
+        "z-30", // Abaixo da sidebar mobile (z-50)
+        "transition-all duration-300",
+
+        // === DESKTOP (>= lg) ===
+        // Header se ajusta ao tamanho da sidebar
+        desktopCollapsed ? "lg:left-16" : "lg:left-64"
       )}
     >
       <div className="flex h-full items-center justify-between px-4 lg:px-6">
-        {/* Mobile menu button and greeting */}
-        <div className="flex items-center space-x-3">
-          {onMobileMenuToggle && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onMobileMenuToggle}
-              className="lg:hidden hover:bg-accent"
-              aria-label="Abrir menu"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-          )}
-          <h1 className="text-lg lg:text-xl font-semibold text-foreground">
+        {/* ========== LEFT SIDE ========== */}
+        <div className="flex items-center gap-3">
+          {/* Botão menu mobile (apenas < lg) */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMobileMenuToggle}
+            className="lg:hidden hover:bg-accent"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+
+          {/* Saudação */}
+          <h1 className="text-base lg:text-xl font-semibold text-foreground truncate">
             Olá, {user?.displayName?.split(' ')[0] || 'Usuário'}! 👋
           </h1>
         </div>
 
-        {/* Right side - notifications and user menu */}
-        <div className="flex items-center space-x-3">
+        {/* ========== RIGHT SIDE ========== */}
+        <div className="flex items-center gap-2">
           {/* Dark mode toggle */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleDarkMode}
-            className="rounded-full"
+            className="rounded-full hover:bg-accent"
+            aria-label={darkMode ? "Modo claro" : "Modo escuro"}
           >
             {darkMode ? (
               <Sun className="h-5 w-5" />
@@ -110,10 +119,15 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
             )}
           </Button>
 
-          {/* Notifications */}
+          {/* Notificações */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative rounded-full">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative rounded-full hover:bg-accent"
+                aria-label="Notificações"
+              >
                 <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive animate-pulse" />
               </Button>
@@ -127,21 +141,29 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* User menu */}
+          {/* Menu do usuário */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-3 rounded-full pl-2 pr-3">
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 rounded-full pl-2 pr-3 hover:bg-accent"
+              >
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={user?.profilePicture || ''} alt={user?.displayName || ''} />
-                  <AvatarFallback className="bg-primary text-primary-foreground">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                     {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
+
+                {/* Info do usuário (apenas desktop) */}
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium truncate max-w-[120px]">
                     {user?.displayName || user?.email}
                   </span>
-                  <Badge variant={getRoleBadgeVariant(user?.role || '')} className="text-xs h-4">
+                  <Badge
+                    variant={getRoleBadgeVariant(user?.role || '')}
+                    className="text-xs h-4 px-1"
+                  >
                     {getRoleLabel(user?.role || '')}
                   </Badge>
                 </div>
@@ -159,7 +181,10 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
                 <span>Configurações</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="cursor-pointer text-destructive focus:text-destructive"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Sair</span>
               </DropdownMenuItem>

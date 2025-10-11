@@ -10,109 +10,131 @@ import {
   Settings,
   ChevronLeft,
   Smartphone,
-  X,
-  Menu
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useEffect } from 'react';
 
 interface SidebarProps {
-  collapsed: boolean;
-  onToggle: () => void;
-  mobileOpen?: boolean;
-  onMobileClose?: () => void;
+  /** Estado de colapso (apenas para desktop >= lg) */
+  desktopCollapsed: boolean;
+  /** Toggle do colapso desktop */
+  onDesktopToggle: () => void;
+  /** Estado de abertura do menu mobile (apenas para < lg) */
+  mobileOpen: boolean;
+  /** Callback para fechar menu mobile */
+  onMobileClose: () => void;
 }
 
 const menuItems = [
   {
     title: 'Dashboard',
-    href: '/dashboard',
+    href: '/dashboard' as const,
     icon: LayoutDashboard,
     description: 'Visão geral'
   },
   {
     title: 'WhatsApp',
-    href: '/dashboard/whatsapp',
+    href: '/dashboard/whatsapp' as const,
     icon: Smartphone,
     description: 'Conexões'
   },
   {
     title: 'Grupos',
-    href: '/dashboard/groups',
+    href: '/dashboard/groups' as const,
     icon: Users,
     description: 'Gerenciar grupos'
   },
   {
     title: 'Mensagens',
-    href: '/dashboard/messages',
+    href: '/dashboard/messages' as const,
     icon: MessageSquare,
     description: 'Envios anônimos'
   },
   {
     title: 'QR Code',
-    href: '/dashboard/qrcode',
+    href: '/dashboard/qrcode' as const,
     icon: QrCode,
     description: 'Scanner'
   },
   {
     title: 'Configurações',
-    href: '/dashboard/settings',
+    href: '/dashboard/settings' as const,
     icon: Settings,
     description: 'Sistema'
   },
 ];
 
-export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose }: SidebarProps) {
+export function Sidebar({
+  desktopCollapsed,
+  onDesktopToggle,
+  mobileOpen,
+  onMobileClose
+}: SidebarProps) {
   const pathname = usePathname();
 
-  // Close mobile menu on route change
+  // Fechar menu mobile ao navegar para outra página
   useEffect(() => {
-    if (onMobileClose) {
-      onMobileClose();
-    }
+    onMobileClose();
   }, [pathname, onMobileClose]);
-
-  // Em mobile, sempre mostrar expandido (não usar collapsed)
-  const isMobileCollapsed = false; // Mobile sempre expandido
-  const isCollapsed = collapsed && !mobileOpen; // Desktop usa collapsed, mobile sempre expandido
 
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* ========== MOBILE OVERLAY ========== */}
+      {/* Visível apenas em mobile (< lg) quando mobileOpen = true */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-[45] lg:hidden animate-in fade-in duration-200"
+          className="lg:hidden fixed inset-0 bg-black/70 z-40 animate-in fade-in duration-200"
           onClick={onMobileClose}
           aria-hidden="true"
         />
       )}
 
-      {/* Sidebar */}
+      {/* ========== SIDEBAR ========== */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border",
-          // Width
-          "w-64 lg:w-auto", // Mobile sempre 256px, desktop varia
-          isCollapsed ? "lg:w-16" : "lg:w-64",
-          // Z-index
-          "z-[50] lg:z-40",
-          // Transitions
-          "transition-transform duration-300 ease-in-out lg:transition-all",
-          // Mobile visibility
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          // Desktop visibility (sempre visível)
-          "lg:translate-x-0"
+          // === BASE (Mobile First) ===
+          // Posicionamento e estrutura base
+          "fixed top-0 h-full",
+          "bg-sidebar z-50 flex flex-col",
+
+          // Largura mobile: 85% da tela (deixa 15% para contexto)
+          "w-[85%] max-w-sm",
+
+          // Estilo mobile: drawer com sombra forte
+          "shadow-2xl",
+
+          // === MOBILE BEHAVIOR (< lg) ===
+          // Posicionamento: -left-full oculta completamente à esquerda
+          // Quando aberto: left-0 traz para a tela
+          mobileOpen ? "left-0" : "-left-full",
+
+          // Transição suave
+          "transition-[left] duration-300 ease-out",
+
+          // === DESKTOP BEHAVIOR (>= lg) ===
+          // Desktop: sempre visível em left-0
+          "lg:left-0",
+
+          // Desktop: largura fixa (não percentual)
+          desktopCollapsed ? "lg:w-16" : "lg:w-64",
+
+          // Desktop: remove sombra, adiciona borda
+          "lg:shadow-none lg:border-r lg:border-sidebar-border",
+
+          // Desktop: transição de largura (não de posição)
+          "lg:transition-[width] lg:duration-300"
         )}
       >
-        {/* Logo/Header */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-          {/* Logo - sempre visível em mobile, depende de collapsed em desktop */}
+        {/* ========== HEADER ========== */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border flex-shrink-0">
+          {/* Logo completo */}
           <div className={cn(
-            "flex items-center space-x-2",
-            isCollapsed && "lg:hidden"
+            "flex items-center gap-2",
+            desktopCollapsed && "lg:hidden"
           )}>
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
             <span className="text-lg font-bold text-sidebar-foreground">
@@ -120,14 +142,14 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
             </span>
           </div>
 
-          {/* Logo colapsado - só em desktop quando collapsed */}
-          {isCollapsed && (
-            <div className="hidden lg:flex w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent items-center justify-center mx-auto">
+          {/* Logo mini (desktop collapsed) */}
+          {desktopCollapsed && (
+            <div className="hidden lg:flex w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-accent items-center justify-center mx-auto shadow-lg">
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
           )}
 
-          {/* Mobile close button */}
+          {/* Botão fechar (apenas mobile) */}
           <Button
             variant="ghost"
             size="icon"
@@ -139,26 +161,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
           </Button>
         </div>
 
-        {/* Toggle Button - Desktop only */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggle}
-          className={cn(
-            "absolute -right-3 top-20 z-50 h-6 w-6 rounded-full border border-sidebar-border bg-sidebar hover:bg-sidebar-accent/10",
-            "transition-transform duration-300 hidden lg:flex"
-          )}
-        >
-          <ChevronLeft
-            className={cn(
-              "h-4 w-4 text-sidebar-foreground transition-transform duration-300",
-              collapsed && "rotate-180"
-            )}
-          />
-        </Button>
-
-        {/* Navigation */}
-        <nav className="flex-1 space-y-1 p-3 overflow-y-auto custom-scrollbar">
+        {/* ========== NAVIGATION ========== */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {menuItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
@@ -167,25 +171,30 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onMobileClose} // Fechar drawer ao clicar
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  "hover:bg-sidebar-accent/10 active:bg-sidebar-accent/20",
+                  "flex items-center gap-3 rounded-lg px-3 py-3 transition-all duration-200",
+                  "hover:bg-sidebar-accent/10 active:scale-[0.98]",
                   isActive
-                    ? "bg-sidebar-accent text-white"
+                    ? "bg-sidebar-accent text-white shadow-md"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
-                  isCollapsed && "lg:justify-center"
+                  desktopCollapsed && "lg:justify-center lg:px-0"
                 )}
-                title={isCollapsed ? item.title : undefined}
+                title={desktopCollapsed ? item.title : undefined}
               >
-                <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-white")} />
-                {/* Em mobile sempre mostrar texto, em desktop depende de collapsed */}
+                <Icon className={cn(
+                  "h-5 w-5 shrink-0",
+                  isActive && "text-white"
+                )} />
+
+                {/* Texto e descrição (ocultos quando collapsed no desktop) */}
                 <div className={cn(
-                  "flex flex-col",
-                  isCollapsed && "lg:hidden"
+                  "flex flex-col min-w-0",
+                  desktopCollapsed && "lg:hidden"
                 )}>
-                  <span>{item.title}</span>
+                  <span className="font-medium text-sm">{item.title}</span>
                   {!isActive && (
-                    <span className="text-xs text-sidebar-foreground/50">
+                    <span className="text-xs text-sidebar-foreground/50 truncate">
                       {item.description}
                     </span>
                   )}
@@ -195,20 +204,50 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="border-t border-sidebar-border p-4">
+        {/* ========== FOOTER ========== */}
+        <div className="border-t border-sidebar-border p-4 flex-shrink-0">
           <div className={cn(
-            "text-xs text-sidebar-foreground/50 text-center",
-            isCollapsed && "lg:hidden"
+            "text-xs text-sidebar-foreground/50 text-center space-y-1",
+            desktopCollapsed && "lg:hidden"
           )}>
-            <p>WhatsApp Baileys v1.0.0</p>
-            <p className="mt-1">© 2024 - Todos os direitos reservados</p>
+            <p className="font-medium">WhatsApp Baileys</p>
+            <p>v1.0.0</p>
+            <p>© 2024</p>
           </div>
-          {isCollapsed && (
-            <div className="hidden lg:flex h-2 w-2 rounded-full bg-success mx-auto" title="Sistema ativo" />
+
+          {/* Indicador mini (desktop collapsed) */}
+          {desktopCollapsed && (
+            <div className="hidden lg:flex justify-center">
+              <div className="h-2 w-2 rounded-full bg-success animate-pulse" title="Sistema ativo" />
+            </div>
           )}
         </div>
       </aside>
+
+      {/* ========== DESKTOP COLLAPSE TOGGLE ========== */}
+      {/* Botão flutuante para colapsar sidebar (apenas desktop) */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onDesktopToggle}
+        className={cn(
+          "hidden lg:flex",
+          "fixed top-20 z-40",
+          "h-8 w-8 rounded-full",
+          "border border-sidebar-border bg-sidebar shadow-md",
+          "hover:bg-sidebar-accent/10",
+          "transition-all duration-300",
+          desktopCollapsed ? "left-[52px]" : "left-[244px]"
+        )}
+        aria-label={desktopCollapsed ? "Expandir menu" : "Recolher menu"}
+      >
+        <ChevronLeft
+          className={cn(
+            "h-4 w-4 text-sidebar-foreground transition-transform duration-300",
+            desktopCollapsed && "rotate-180"
+          )}
+        />
+      </Button>
     </>
   );
 }

@@ -166,69 +166,74 @@ function GroupsContent() {
         </Button>
       </div>
 
-      {/* Groups List */}
-      <div className="grid gap-4">
+      {/* Groups List - Cards otimizados para mobile */}
+      <div className="grid gap-3 sm:gap-4">
         {groups.map((group) => (
-          <Card key={group.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
-                {/* Avatar */}
-                <Avatar className="h-14 w-14">
+          <Card key={group.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+            <CardContent className="p-3 sm:p-6">
+              <div className="flex items-start gap-3 sm:gap-4">
+                {/* Avatar - menor e alinhado ao topo */}
+                <Avatar className="h-10 w-10 sm:h-14 sm:w-14 shrink-0 mt-0.5">
                   <AvatarImage src={group.avatar || ''} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm sm:text-lg">
                     {group.name.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
+                {/* Info - layout compacto */}
+                <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
+                  {/* Header: Título + Badge + Menu */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-lg truncate">
+                      <h3 className="font-semibold text-sm sm:text-lg leading-tight truncate">
                         {group.name}
                       </h3>
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className="text-[11px] sm:text-sm text-muted-foreground truncate leading-tight mt-0.5">
                         {group.description}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       {group.unreadMessages > 0 && (
-                        <Badge variant="destructive" className="rounded-full">
+                        <Badge variant="destructive" className="rounded-full text-[10px] h-4 min-w-[16px] px-1">
                           {group.unreadMessages}
                         </Badge>
                       )}
-                      <Button variant="ghost" size="icon">
-                        <MoreVertical className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 -mr-2">
+                        <MoreVertical className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
+                  {/* Stats - sempre em linha (compacto) */}
+                  <div className="flex items-center gap-3 sm:gap-4 text-[11px] sm:text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span>{group.members} membros</span>
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span>{group.members}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Shield className="h-4 w-4" />
-                      <span>{group.admins} admins</span>
+                      <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span>{group.admins}</span>
                     </div>
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="truncate">{group.lastMessageTime}</span>
                   </div>
 
-                  <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm truncate">{group.lastMessage}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {group.lastMessageTime}
+                  {/* Última mensagem - compacta */}
+                  <div className="p-2 sm:p-2.5 bg-muted/50 rounded-md">
+                    <p className="text-[11px] sm:text-sm truncate leading-tight">
+                      {group.lastMessage}
                     </p>
                   </div>
 
-                  <div className="flex gap-2 mt-4">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Adicionar Membros
+                  {/* Botões - sempre em linha (compacto em mobile) */}
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 text-[11px] sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+                      <UserPlus className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1 sm:mr-1.5 shrink-0" />
+                      <span className="truncate">Add</span>
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Configurar
+                    <Button variant="outline" size="sm" className="flex-1 text-[11px] sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+                      <Settings className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1 sm:mr-1.5 shrink-0" />
+                      <span className="truncate">Config</span>
                     </Button>
                   </div>
                 </div>

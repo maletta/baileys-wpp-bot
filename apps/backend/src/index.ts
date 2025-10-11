@@ -19,6 +19,7 @@ import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase
 import { SessionController } from '@/presentation/controllers/SessionController';
 import { AuthMiddleware } from '@/presentation/middlewares/authMiddleware';
 import { createAuthRoutes } from '@/presentation/routes/authRoutes';
+import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
@@ -118,10 +119,8 @@ class App {
   }
 
   private initializeRoutes(): void {
-    // Health check
-    this.express.get('/health', (req, res) => {
-      res.json({ status: 'OK', timestamp: new Date().toISOString() });
-    });
+    // Health check routes
+    this.express.use('/health', createHealthRoutes(this.prisma, this.baileysService));
 
     // Auth routes
     this.express.use('/api/auth', createAuthRoutes(this.prisma));

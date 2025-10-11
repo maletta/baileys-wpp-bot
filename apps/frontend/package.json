@@ -4,7 +4,7 @@
   "description": "Frontend Next.js para WhatsApp Baileys Management",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3333",
+    "dev": "next dev -H 0.0.0.0 -p 3333",
     "build": "next build",
     "start": "next start -p 3333",
     "lint": "next lint",

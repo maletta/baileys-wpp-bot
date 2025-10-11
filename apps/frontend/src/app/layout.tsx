@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -11,7 +11,11 @@ export const metadata: Metadata = {
   description: 'Sistema de gerenciamento de WhatsApp usando Baileys',
   keywords: ['WhatsApp', 'Baileys', 'Gerenciamento', 'Bot'],
   authors: [{ name: 'WhatsApp Baileys Team' }],
-  viewport: 'width=device-width, initial-scale=1',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -20,14 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <head>
-        <script
-          src="https://accounts.google.com/gsi/client"
-          async
-          defer
-        />
-      </head>
+    <html lang="pt-BR" suppressHydrationWarning>
       <body className={inter.className}>
         <AuthProvider>
           {children}

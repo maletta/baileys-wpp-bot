@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { storage } from '@/lib/utils';
@@ -63,8 +65,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const login = async (googleToken: string) => {
     try {
+      console.log('userAuth - login - googleToken', googleToken);
       setIsLoading(true);
       const response = await api.googleAuth(googleToken);
+      console.log('userAuth - response', response);
 
       // Salvar dados no storage
       storage.set('accessToken', response.accessToken);

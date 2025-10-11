@@ -1,235 +1,301 @@
 'use client';
 
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { LogOut, Settings, Users, MessageSquare, QrCode } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Activity,
+  Users,
+  MessageSquare,
+  TrendingUp,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ArrowUpRight
+} from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
-      <DashboardContent />
+      <DashboardLayout>
+        <DashboardContent />
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }
 
 function DashboardContent() {
-  const { user, logout } = useAuth();
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Erro no logout:', error);
-    }
-  };
-
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'HIGH_LEVEL_ADMIN':
-        return 'destructive';
-      case 'DEVELOPER':
-        return 'secondary';
-      case 'GROUP_ADMIN':
-        return 'default';
-      default:
-        return 'outline';
-    }
-  };
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'HIGH_LEVEL_ADMIN':
-        return 'Admin Principal';
-      case 'DEVELOPER':
-        return 'Desenvolvedor';
-      case 'GROUP_ADMIN':
-        return 'Admin de Grupo';
-      case 'MEMBER':
-        return 'Membro';
-      default:
-        return role;
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">
-                WhatsApp Baileys Dashboard
-              </h1>
-            </div>
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        <p className="text-muted-foreground mt-1">
+          Acompanhe suas estatísticas e gerencie suas conexões WhatsApp
+        </p>
+      </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.profilePicture || ''} alt={user?.displayName || ''} />
-                  <AvatarFallback>
-                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden md:block">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.displayName || user?.email}
-                  </p>
-                  <Badge variant={getRoleBadgeVariant(user?.role || '')} className="text-xs">
-                    {getRoleLabel(user?.role || '')}
-                  </Badge>
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Conexões Ativas
+            </CardTitle>
+            <Activity className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">2</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-success">+1</span> desde ontem
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Grupos Gerenciados
+            </CardTitle>
+            <Users className="h-4 w-4 text-info" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">24</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-info">+3</span> novos grupos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Mensagens Enviadas
+            </CardTitle>
+            <MessageSquare className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">1,234</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-primary">+89</span> hoje
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Taxa de Entrega
+            </CardTitle>
+            <TrendingUp className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">98.5%</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-success">+2.1%</span> vs. semana passada
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* Recent Activity */}
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Atividade Recente</CardTitle>
+            <CardDescription>
+              Últimas ações realizadas no sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[
+                {
+                  icon: CheckCircle2,
+                  text: 'Conexão WhatsApp estabelecida com sucesso',
+                  time: '2 minutos atrás',
+                  color: 'text-success'
+                },
+                {
+                  icon: MessageSquare,
+                  text: '15 mensagens enviadas para o grupo Marketing',
+                  time: '10 minutos atrás',
+                  color: 'text-primary'
+                },
+                {
+                  icon: Users,
+                  text: 'Novo grupo adicionado: Vendas 2024',
+                  time: '1 hora atrás',
+                  color: 'text-info'
+                },
+                {
+                  icon: Clock,
+                  text: 'Sincronização de contatos concluída',
+                  time: '2 horas atrás',
+                  color: 'text-muted-foreground'
+                },
+                {
+                  icon: XCircle,
+                  text: 'Tentativa de conexão falhou - Reconectado',
+                  time: '3 horas atrás',
+                  color: 'text-warning'
+                },
+              ].map((activity, index) => {
+                const Icon = activity.icon;
+                return (
+                  <div key={index} className="flex items-start space-x-4">
+                    <Icon className={`h-5 w-5 mt-0.5 ${activity.color}`} />
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {activity.text}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {activity.time}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Ações Rápidas</CardTitle>
+            <CardDescription>
+              Acesse as funcionalidades principais
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Link href="/dashboard/whatsapp">
+              <Button className="w-full justify-between" variant="outline">
+                <span>Conectar WhatsApp</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/dashboard/groups">
+              <Button className="w-full justify-between" variant="outline">
+                <span>Gerenciar Grupos</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/dashboard/messages">
+              <Button className="w-full justify-between" variant="outline">
+                <span>Enviar Mensagens</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/dashboard/qrcode">
+              <Button className="w-full justify-between" variant="outline">
+                <span>Scanner QR Code</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/dashboard/settings">
+              <Button className="w-full justify-between" variant="outline">
+                <span>Configurações</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Status Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Status do Sistema</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">API Backend</span>
+              <div className="flex items-center space-x-2">
+                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span className="text-sm font-medium text-success">Online</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-sm text-muted-foreground">WebSocket</span>
+              <div className="flex items-center space-x-2">
+                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span className="text-sm font-medium text-success">Conectado</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-sm text-muted-foreground">Database</span>
+              <div className="flex items-center space-x-2">
+                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span className="text-sm font-medium text-success">Ativo</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Desempenho</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium">42%</span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full" style={{ width: '42%' }} />
                 </div>
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="flex items-center space-x-2"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Sair</span>
-              </Button>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Memória</span>
+                  <span className="font-medium">68%</span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-2">
+                  <div className="bg-warning h-2 rounded-full" style={{ width: '68%' }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Disco</span>
+                  <span className="font-medium">34%</span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-2">
+                  <div className="bg-success h-2 rounded-full" style={{ width: '34%' }} />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </header>
+          </CardContent>
+        </Card>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Bem-vindo, {user?.displayName || user?.email}!
-            </h2>
-            <p className="text-gray-600">
-              Gerencie suas conexões WhatsApp e grupos através do painel de controle.
-            </p>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Conexão WhatsApp</CardTitle>
-                <QrCode className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">Desconectado</div>
-                <p className="text-xs text-muted-foreground">
-                  Status da conexão atual
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Grupos Ativos</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">0</div>
-                <p className="text-xs text-muted-foreground">
-                  Grupos sincronizados
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Mensagens Pendentes</CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">0</div>
-                <p className="text-xs text-muted-foreground">
-                  Aguardando aprovação
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Configurações</CardTitle>
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">Ativo</div>
-                <p className="text-xs text-muted-foreground">
-                  Sistema operacional
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Ações Rápidas</CardTitle>
-                <CardDescription>
-                  Acesse as funcionalidades principais do sistema
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button className="w-full justify-start" variant="outline">
-                  <QrCode className="mr-2 h-4 w-4" />
-                  Conectar WhatsApp
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <Users className="mr-2 h-4 w-4" />
-                  Gerenciar Grupos
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Mensagens Anônimas
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configurações
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Informações da Conta</CardTitle>
-                <CardDescription>
-                  Detalhes do seu perfil e permissões
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={user?.profilePicture || ''} alt={user?.displayName || ''} />
-                    <AvatarFallback className="text-lg">
-                      {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-1">
-                    <h3 className="font-medium">{user?.displayName || 'Usuário'}</h3>
-                    <p className="text-sm text-gray-500">{user?.email}</p>
-                    <Badge variant={getRoleBadgeVariant(user?.role || '')}>
-                      {getRoleLabel(user?.role || '')}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-gray-500">
-                    Conta criada em: {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('pt-BR') : 'N/A'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Última Sincronização</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Contatos</p>
+                <p className="text-xs text-muted-foreground">5 minutos atrás</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Grupos</p>
+                <p className="text-xs text-muted-foreground">10 minutos atrás</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Mensagens</p>
+                <p className="text-xs text-muted-foreground">1 minuto atrás</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

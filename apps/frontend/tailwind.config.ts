@@ -57,6 +57,28 @@ const config: Config = {
           dark: "#128C7E",
           light: "#DCF8C6",
         },
+        // Modern Dashboard Color Scheme
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          border: "hsl(var(--sidebar-border))",
+        },
+        success: {
+          DEFAULT: "#10B981",
+          light: "#D1FAE5",
+          dark: "#059669",
+        },
+        warning: {
+          DEFAULT: "#F59E0B",
+          light: "#FEF3C7",
+          dark: "#D97706",
+        },
+        info: {
+          DEFAULT: "#3B82F6",
+          light: "#DBEAFE",
+          dark: "#2563EB",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

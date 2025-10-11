@@ -285,7 +285,7 @@ function SettingsContent() {
           <div className="space-y-2">
             <label className="text-sm font-medium">URL da API Backend</label>
             <Input
-              defaultValue={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}
+              defaultValue={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4444/api'}
               disabled
             />
             <p className="text-xs text-muted-foreground">

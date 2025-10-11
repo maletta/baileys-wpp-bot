@@ -202,7 +202,7 @@ export default function MinhaPage() {
 ## 🔧 Variáveis de Ambiente
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_URL=http://localhost:4444/api
 NEXT_PUBLIC_APP_URL=http://localhost:3333
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=seu-client-id
 ```

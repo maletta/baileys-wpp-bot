@@ -69,7 +69,8 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
   return (
     <header
       className={cn(
-        "fixed top-0 right-0 z-30 h-16 bg-white/80 backdrop-blur-sm border-b border-border transition-all duration-300",
+        "fixed top-0 right-0 h-16 bg-white/80 backdrop-blur-sm border-b border-border transition-all duration-300",
+        "z-40 lg:z-30", // Mobile: abaixo da sidebar, Desktop: acima do conteúdo
         "left-0 lg:left-64", // Mobile: full width, Desktop: respect sidebar
         sidebarCollapsed ? "lg:left-16" : "lg:left-64"
       )}
@@ -82,7 +83,8 @@ export function Header({ sidebarCollapsed, onMobileMenuToggle }: HeaderProps) {
               variant="ghost"
               size="icon"
               onClick={onMobileMenuToggle}
-              className="lg:hidden"
+              className="lg:hidden hover:bg-accent"
+              aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5" />
             </Button>

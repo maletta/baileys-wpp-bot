@@ -252,7 +252,7 @@
   }
 }
 
-/* Mobile-first responsive utilities */
+  /* Mobile-first responsive utilities */
 @layer utilities {
   .safe-top {
     padding-top: env(safe-area-inset-top);
@@ -269,4 +269,36 @@
   .safe-right {
     padding-right: env(safe-area-inset-right);
   }
+
+  /* Prevent body scroll when mobile menu is open */
+  .overflow-hidden {
+    overflow: hidden;
+  }
+}
+
+/* Mobile menu animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
 }

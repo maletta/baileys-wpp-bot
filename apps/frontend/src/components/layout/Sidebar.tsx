@@ -73,55 +73,70 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
     }
   }, [pathname, onMobileClose]);
 
+  // Em mobile, sempre mostrar expandido (não usar collapsed)
+  const isMobileCollapsed = false; // Mobile sempre expandido
+  const isCollapsed = collapsed && !mobileOpen; // Desktop usa collapsed, mobile sempre expandido
+
   return (
     <>
       {/* Mobile Overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/60 z-[45] lg:hidden animate-in fade-in duration-200"
           onClick={onMobileClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out",
-          collapsed ? "w-16" : "w-64",
-          // Mobile: hide by default, show when mobileOpen
-          "lg:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border",
+          // Width
+          "w-64 lg:w-auto", // Mobile sempre 256px, desktop varia
+          isCollapsed ? "lg:w-16" : "lg:w-64",
+          // Z-index
+          "z-[50] lg:z-40",
+          // Transitions
+          "transition-transform duration-300 ease-in-out lg:transition-all",
+          // Mobile visibility
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          // Desktop visibility (sempre visível)
+          "lg:translate-x-0"
         )}
       >
         {/* Logo/Header */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-          {!collapsed && (
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-sidebar-foreground">
-                WA Baileys
-              </span>
+          {/* Logo - sempre visível em mobile, depende de collapsed em desktop */}
+          <div className={cn(
+            "flex items-center space-x-2",
+            isCollapsed && "lg:hidden"
+          )}>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <MessageSquare className="h-5 w-5 text-white" />
             </div>
-          )}
-          {collapsed && (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto">
+            <span className="text-lg font-bold text-sidebar-foreground">
+              WA Baileys
+            </span>
+          </div>
+
+          {/* Logo colapsado - só em desktop quando collapsed */}
+          {isCollapsed && (
+            <div className="hidden lg:flex w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent items-center justify-center mx-auto">
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
           )}
 
           {/* Mobile close button */}
-          {onMobileClose && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onMobileClose}
-              className="lg:hidden text-sidebar-foreground"
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMobileClose}
+            className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent/20"
+            aria-label="Fechar menu"
+          >
+            <X className="h-5 w-5" />
+          </Button>
         </div>
 
         {/* Toggle Button - Desktop only */}
@@ -154,25 +169,27 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
                 href={item.href}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  "hover:bg-sidebar-accent/10",
+                  "hover:bg-sidebar-accent/10 active:bg-sidebar-accent/20",
                   isActive
                     ? "bg-sidebar-accent text-white"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
-                  collapsed && "justify-center"
+                  isCollapsed && "lg:justify-center"
                 )}
-                title={collapsed ? item.title : undefined}
+                title={isCollapsed ? item.title : undefined}
               >
                 <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-white")} />
-                {!collapsed && (
-                  <div className="flex flex-col">
-                    <span>{item.title}</span>
-                    {!isActive && (
-                      <span className="text-xs text-sidebar-foreground/50">
-                        {item.description}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* Em mobile sempre mostrar texto, em desktop depende de collapsed */}
+                <div className={cn(
+                  "flex flex-col",
+                  isCollapsed && "lg:hidden"
+                )}>
+                  <span>{item.title}</span>
+                  {!isActive && (
+                    <span className="text-xs text-sidebar-foreground/50">
+                      {item.description}
+                    </span>
+                  )}
+                </div>
               </Link>
             );
           })}
@@ -180,13 +197,15 @@ export function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose
 
         {/* Footer */}
         <div className="border-t border-sidebar-border p-4">
-          {!collapsed ? (
-            <div className="text-xs text-sidebar-foreground/50 text-center">
-              <p>WhatsApp Baileys v1.0.0</p>
-              <p className="mt-1">© 2024 - Todos os direitos reservados</p>
-            </div>
-          ) : (
-            <div className="h-2 w-2 rounded-full bg-success mx-auto" title="Sistema ativo" />
+          <div className={cn(
+            "text-xs text-sidebar-foreground/50 text-center",
+            isCollapsed && "lg:hidden"
+          )}>
+            <p>WhatsApp Baileys v1.0.0</p>
+            <p className="mt-1">© 2024 - Todos os direitos reservados</p>
+          </div>
+          {isCollapsed && (
+            <div className="hidden lg:flex h-2 w-2 rounded-full bg-success mx-auto" title="Sistema ativo" />
           )}
         </div>
       </aside>

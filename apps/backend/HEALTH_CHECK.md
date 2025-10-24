@@ -43,7 +43,7 @@ GET /health
         }
       }
     },
-    "version": "7.0.0-rc.3",
+    "version": "7.0.0-rc.6",
     "environment": "development"
   }
 }
@@ -72,7 +72,7 @@ GET /health
         "message": "WhatsApp não conectado"
       }
     },
-    "version": "7.0.0-rc.3",
+    "version": "7.0.0-rc.6",
     "environment": "development"
   }
 }

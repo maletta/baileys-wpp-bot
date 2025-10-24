@@ -11,12 +11,14 @@ import { PrismaClient } from '@prisma/client';
 // Import infrastructure
 import { BaileysSocketService } from '@/infrastructure/services/BaileysSocketService';
 import { UserRepository } from '@/infrastructure/repositories/UserRepository';
+import { QrCodeTryRepository } from '@/infrastructure/repositories/QrCodeTryRepository';
 
 // Import application
 import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase';
 
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
+import { SessionSocketController } from '@/presentation/controllers/SessionSocketController';
 import { AuthMiddleware } from '@/presentation/middlewares/authMiddleware';
 import { createAuthRoutes } from '@/presentation/routes/authRoutes';
 import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
@@ -33,6 +35,7 @@ class App {
   // Services
   private baileysService!: BaileysSocketService;
   private userRepository!: UserRepository;
+  private qrCodeTryRepository!: QrCodeTryRepository;
   private authMiddleware!: AuthMiddleware;
 
   // Use Cases
@@ -40,6 +43,7 @@ class App {
 
   // Controllers
   private sessionController!: SessionController;
+  private sessionSocketController!: SessionSocketController;
 
   constructor() {
     this.express = express();
@@ -68,6 +72,7 @@ class App {
   private initializeServices(): void {
     // Initialize repositories
     this.userRepository = new UserRepository(this.prisma);
+    this.qrCodeTryRepository = new QrCodeTryRepository(this.prisma);
 
     // Initialize middleware
     this.authMiddleware = new AuthMiddleware(
@@ -94,6 +99,15 @@ class App {
     this.sessionController = new SessionController(
       this.createQrCodeUseCase,
       this.baileysService
+    );
+
+    // Initialize Socket.IO controller for session management
+    this.sessionSocketController = new SessionSocketController(
+      this.io,
+      this.baileysService,
+      this.userRepository,
+      this.qrCodeTryRepository,
+      process.env.JWT_SECRET || 'default-secret'
     );
   }
 
@@ -156,19 +170,9 @@ class App {
   }
 
   private initializeSocketIO(): void {
-    this.io.on('connection', (socket) => {
-      logger.info('Socket client connected', { socketId: socket.id });
-
-      // Handle session frontend join
-      socket.on('session-frontend-join', (sessionId: string) => {
-        logger.info('Frontend joined session', { sessionId, socketId: socket.id });
-        socket.join(`session-${sessionId}`);
-      });
-
-      socket.on('disconnect', () => {
-        logger.info('Socket client disconnected', { socketId: socket.id });
-      });
-    });
+    // Socket.IO is now handled by SessionSocketController
+    // The controller is initialized in initializeControllers()
+    logger.info('Socket.IO initialized via SessionSocketController');
   }
 
   private initializeBaileysEvents(): void {

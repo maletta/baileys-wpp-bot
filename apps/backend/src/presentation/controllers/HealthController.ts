@@ -37,7 +37,7 @@ export class HealthController {
             mongodb: { status: 'down' },
             whatsapp: { status: 'down' }
           },
-          version: process.env.BAILEYS_VERSION || '7.0.0-rc.3',
+          version: process.env.BAILEYS_VERSION || '7.0.0-rc.6',
           environment: process.env.NODE_ENV || 'development'
         },
         error: 'Health check failed',

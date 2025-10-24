@@ -61,7 +61,7 @@ export class HealthCheckUseCase {
       timestamp: new Date().toISOString(),
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       services,
-      version: process.env.BAILEYS_VERSION || '7.0.0-rc.3',
+      version: process.env.BAILEYS_VERSION || '7.0.0-rc.6',
       environment: process.env.NODE_ENV || 'development'
     };
   }

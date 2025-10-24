@@ -4,11 +4,14 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   GroupMetadata,
-  proto
-} from 'baileys';
+  proto,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore
+} from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import QRCodeTerminal from 'qrcode-terminal';
+import pino from 'pino';
 import path from 'path';
 import {
   IBaileysSocketService,
@@ -19,13 +22,24 @@ import {
 } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
 
+// Logger do Pino para Baileys (mais silencioso)
+const baileysLogger = pino({
+  level: process.env.BAILEYS_LOG_LEVEL || 'silent' // Opções: 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'
+});
+
 export class BaileysSocketService implements IBaileysSocketService {
   private socket: WASocket | null = null;
   private connectionState: ConnectionState = { isConnected: false };
   private currentSessionId: string | null = null;
+  private qrCodeGenerationTimeout: NodeJS.Timeout | null = null;
+  private qrCodePromiseResolve: ((value: string) => void) | null = null;
+  private qrCodePromiseReject: ((reason: any) => void) | null = null;
 
   // Event callbacks
   private connectionUpdateCallbacks: Array<(state: ConnectionState) => void> = [];
+  private qrCodeCallbacks: Array<(qrCode: string, sessionId: string) => void> = [];
+  private connectionEstablishedCallbacks: Array<(sessionId: string, deviceInfo: any) => void> = [];
+  private connectionFailedCallbacks: Array<(sessionId: string, error: string) => void> = [];
   private groupJoinCallbacks: Array<(groupData: BaileysGroupData) => void> = [];
   private participantJoinCallbacks: Array<(groupId: string, participantId: string) => void> = [];
   private participantLeaveCallbacks: Array<(groupId: string, participantIds: string[]) => void> = [];
@@ -39,80 +53,55 @@ export class BaileysSocketService implements IBaileysSocketService {
 
   async createConnection(sessionId: string): Promise<string> {
     try {
+      // Verificar se já existe uma conexão ativa
+      if (this.socket && this.connectionState.isConnected) {
+        throw new Error('Já existe uma conexão ativa');
+      }
+
       this.currentSessionId = sessionId;
       const sessionDir = path.join(this.sessionPath, sessionId);
 
       // Setup authentication state
       const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
+      // Buscar versão mais recente do WhatsApp Web
+      const { version, isLatest } = await fetchLatestBaileysVersion();
+      logger.info('Using WhatsApp Web version', { version: version.join('.'), isLatest });
+
       // Create socket connection
       this.socket = makeWASocket({
-        auth: state,
-        version: [2, 2429, 4], // Versão do WhatsApp Web compatível
-        generateHighQualityLinkPreview: true,
-        markOnlineOnConnect: false,
-        browser: [this.browserName, 'Desktop', this.browserVersion],
-        defaultQueryTimeoutMs: 60000,
-        keepAliveIntervalMs: 30000,
-        getMessage: this.getMessageFromMongoDB.bind(this),
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
+        },
+        printQRInTerminal: false,
+        browser: ['WhatsApp Bot', 'Chrome', '120.0.0'],
         syncFullHistory: false,
-        maxMsgRetryCount: 3,
-        logger: logger as any
+        markOnlineOnConnect: true,
+        generateHighQualityLinkPreview: true,
+        getMessage: this.getMessageFromMongoDB.bind(this),
+        logger: baileysLogger,
+        defaultQueryTimeoutMs: 60000,
+        retryRequestDelayMs: 250,
+        connectTimeoutMs: 60_000,
+        qrTimeout: 40_000,
       });
 
       // Setup event listeners
       this.setupEventListeners(saveCreds);
+      this.setupConnectionEventListener(sessionId);
 
       // Return promise that resolves when QR code is generated
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
+        this.qrCodePromiseResolve = resolve;
+        this.qrCodePromiseReject = reject;
+
+        this.qrCodeGenerationTimeout = setTimeout(() => {
+          this.qrCodePromiseResolve = null;
+          this.qrCodePromiseReject = null;
           reject(new Error('Timeout waiting for QR code'));
-        }, 30000);
-
-        this.socket!.ev.on('connection.update', async (update) => {
-          const { connection, lastDisconnect, qr } = update;
-
-          if (qr) {
-            clearTimeout(timeout);
-            try {
-              // Generate QR code string
-              const qrCodeString = await QRCode.toDataURL(qr);
-
-              // Print QR code in terminal
-              QRCodeTerminal.generate(qr, { small: true });
-
-              logger.info('QR Code generated', { sessionId });
-              resolve(qrCodeString);
-            } catch (error) {
-              reject(error);
-            }
-          }
-
-          if (connection === 'close') {
-            clearTimeout(timeout);
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-
-            if (shouldReconnect) {
-              logger.info('Connection closed, attempting to reconnect', { sessionId });
-              // Could implement reconnection logic here
-            } else {
-              logger.info('Connection closed permanently', { sessionId });
-              reject(new Error('Connection closed'));
-            }
-          } else if (connection === 'open') {
-            clearTimeout(timeout);
-            logger.info('WhatsApp connection established', { sessionId });
-            this.updateConnectionState({
-              isConnected: true,
-              sessionId,
-              deviceInfo: {
-                id: this.socket!.user?.id || '',
-                name: this.socket!.user?.name || '',
-                platform: 'WhatsApp'
-              }
-            });
-          }
-        });
+        }, 60000); // 60 segundos timeout
       });
 
     } catch (error) {
@@ -126,10 +115,30 @@ export class BaileysSocketService implements IBaileysSocketService {
   }
 
   async disconnect(): Promise<void> {
-    if (this.socket) {
-      await this.socket.logout();
-      this.socket = null;
-      this.updateConnectionState({ isConnected: false });
+    try {
+      if (this.qrCodeGenerationTimeout) {
+        clearTimeout(this.qrCodeGenerationTimeout);
+        this.qrCodeGenerationTimeout = null;
+      }
+
+      if (this.socket) {
+        // Guardar sessionId antes de limpar
+        const sessionIdToClean = this.currentSessionId;
+
+        await this.socket.logout();
+        this.socket = null;
+        this.currentSessionId = null;
+        this.updateConnectionState({ isConnected: false });
+
+        // Limpar pasta de sessão
+        if (sessionIdToClean) {
+          const sessionDir = path.join(this.sessionPath, sessionIdToClean);
+          this.clearSessionDir(sessionDir);
+        }
+      }
+    } catch (error) {
+      logger.error('Error disconnecting', { error });
+      throw error;
     }
   }
 
@@ -197,6 +206,18 @@ export class BaileysSocketService implements IBaileysSocketService {
     this.connectionUpdateCallbacks.push(callback);
   }
 
+  onQrCodeGenerated(callback: (qrCode: string, sessionId: string) => void): void {
+    this.qrCodeCallbacks.push(callback);
+  }
+
+  onConnectionEstablished(callback: (sessionId: string, deviceInfo: any) => void): void {
+    this.connectionEstablishedCallbacks.push(callback);
+  }
+
+  onConnectionFailed(callback: (sessionId: string, error: string) => void): void {
+    this.connectionFailedCallbacks.push(callback);
+  }
+
   onGroupJoin(callback: (groupData: BaileysGroupData) => void): void {
     this.groupJoinCallbacks.push(callback);
   }
@@ -211,6 +232,152 @@ export class BaileysSocketService implements IBaileysSocketService {
 
   onGroupUpdate(callback: (groupId: string, action: 'promote' | 'demote', participantIds: string[]) => void): void {
     this.groupUpdateCallbacks.push(callback);
+  }
+
+  private setupConnectionEventListener(sessionId: string): void {
+    if (!this.socket) return;
+
+    this.socket.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      // QR Code gerado
+      if (qr) {
+        try {
+          if (this.qrCodeGenerationTimeout) {
+            clearTimeout(this.qrCodeGenerationTimeout);
+            this.qrCodeGenerationTimeout = null;
+          }
+
+          // Generate QR code data URL
+          const qrCodeString = await QRCode.toDataURL(qr);
+
+          // Print QR code in terminal para debug
+          QRCodeTerminal.generate(qr, { small: true });
+
+          logger.info('QR Code generated', { sessionId });
+
+          // Resolver a Promise de createConnection
+          if (this.qrCodePromiseResolve) {
+            this.qrCodePromiseResolve(qrCodeString);
+            this.qrCodePromiseResolve = null;
+            this.qrCodePromiseReject = null;
+          }
+
+          // Notificar todos os listeners de QR code
+          this.qrCodeCallbacks.forEach(callback => callback(qrCodeString, sessionId));
+        } catch (error) {
+          logger.error('Error generating QR code', { error, sessionId });
+
+          // Rejeitar a Promise de createConnection
+          if (this.qrCodePromiseReject) {
+            this.qrCodePromiseReject(error);
+            this.qrCodePromiseResolve = null;
+            this.qrCodePromiseReject = null;
+          }
+
+          this.connectionFailedCallbacks.forEach(callback =>
+            callback(sessionId, 'Erro ao gerar QR code')
+          );
+        }
+      }
+
+      // Conexão fechada
+      if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const errorMessage = (lastDisconnect?.error as Boom)?.message || 'Conexão fechada';
+
+        // Determinar se deve reconectar baseado no motivo da desconexão
+        const shouldReconnect = this.shouldReconnect(statusCode);
+
+        logger.info('Connection closed', {
+          sessionId,
+          shouldReconnect,
+          errorMessage,
+          statusCode,
+          reason: this.getDisconnectReason(statusCode)
+        });
+
+        this.updateConnectionState({ isConnected: false });
+
+        // Rejeitar a Promise se ainda estiver pendente (apenas se não vai reconectar)
+        if (this.qrCodePromiseReject && !shouldReconnect) {
+          this.qrCodePromiseReject(new Error(errorMessage));
+          this.qrCodePromiseResolve = null;
+          this.qrCodePromiseReject = null;
+        }
+
+        if (shouldReconnect) {
+          // Reconectar automaticamente após 5 segundos
+          logger.info('Attempting to reconnect', { sessionId, delaySeconds: 5 });
+          setTimeout(async () => {
+            try {
+              logger.info('Reconnecting to WhatsApp', { sessionId });
+              const sessionDir = path.join(this.sessionPath, sessionId);
+              const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+              const { version } = await fetchLatestBaileysVersion();
+
+              this.socket = makeWASocket({
+                version,
+                auth: {
+                  creds: state.creds,
+                  keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
+                },
+                printQRInTerminal: false,
+                browser: ['WhatsApp Bot', 'Chrome', '120.0.0'],
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
+                generateHighQualityLinkPreview: true,
+                getMessage: this.getMessageFromMongoDB.bind(this),
+                logger: baileysLogger,
+                defaultQueryTimeoutMs: 60000,
+              });
+
+              this.setupEventListeners(saveCreds);
+              this.setupConnectionEventListener(sessionId);
+            } catch (error) {
+              logger.error('Failed to reconnect', { error, sessionId });
+              this.connectionFailedCallbacks.forEach(callback =>
+                callback(sessionId, `Erro ao reconectar: ${errorMessage}`)
+              );
+            }
+          }, 5000);
+        } else {
+          // Conexão foi deslogada ou erro crítico - limpar dados da sessão
+          const sessionDir = path.join(this.sessionPath, sessionId);
+          this.clearSessionDir(sessionDir);
+
+          this.connectionFailedCallbacks.forEach(callback =>
+            callback(sessionId, errorMessage)
+          );
+
+          // Limpar socket
+          this.socket = null;
+          this.currentSessionId = null;
+        }
+      }
+
+      // Conexão estabelecida com sucesso
+      if (connection === 'open') {
+        logger.info('WhatsApp connection established', { sessionId });
+
+        const deviceInfo = {
+          id: this.socket!.user?.id || '',
+          name: this.socket!.user?.name || '',
+          platform: 'WhatsApp'
+        };
+
+        this.updateConnectionState({
+          isConnected: true,
+          sessionId,
+          deviceInfo
+        });
+
+        // Notificar todos os listeners de conexão estabelecida
+        this.connectionEstablishedCallbacks.forEach(callback =>
+          callback(sessionId, deviceInfo)
+        );
+      }
+    });
   }
 
   private setupEventListeners(saveCreds: () => Promise<void>): void {
@@ -230,21 +397,22 @@ export class BaileysSocketService implements IBaileysSocketService {
     // Group participant updates
     this.socket.ev.on('group-participants.update', (update) => {
       const { id: groupId, participants, action } = update;
+      const participantIds = participants.map((p: any) => typeof p === 'string' ? p : p.id);
 
       switch (action) {
         case 'add':
-          participants.forEach(participantId => {
+          participantIds.forEach(participantId => {
             this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId));
           });
           break;
 
         case 'remove':
-          this.participantLeaveCallbacks.forEach(callback => callback(groupId, participants));
+          this.participantLeaveCallbacks.forEach(callback => callback(groupId, participantIds));
           break;
 
         case 'promote':
         case 'demote':
-          this.groupUpdateCallbacks.forEach(callback => callback(groupId, action, participants));
+          this.groupUpdateCallbacks.forEach(callback => callback(groupId, action, participantIds));
           break;
       }
     });
@@ -288,5 +456,52 @@ export class BaileysSocketService implements IBaileysSocketService {
     // TODO: Implement MongoDB message retrieval
     logger.debug('Getting message from MongoDB', { key });
     return undefined;
+  }
+
+  /**
+   * Determina se deve reconectar baseado no código de status da desconexão
+   */
+  private shouldReconnect(statusCode: number | undefined): boolean {
+    if (!statusCode) return true; // Sem código específico, tenta reconectar
+
+    // Não reconectar em casos específicos
+    const doNotReconnect = [
+      DisconnectReason.loggedOut,           // Usuário fez logout
+      DisconnectReason.badSession,          // Sessão inválida/corrompida
+    ];
+
+    return !doNotReconnect.includes(statusCode);
+  }
+
+  /**
+   * Obtém descrição do motivo de desconexão
+   */
+  private getDisconnectReason(statusCode: number | undefined): string {
+    if (!statusCode) return 'Desconhecido';
+
+    const reasons: Record<number, string> = {
+      [DisconnectReason.badSession]: 'Sessão Inválida',
+      [DisconnectReason.connectionClosed]: 'Conexão Fechada',
+      [DisconnectReason.connectionLost]: 'Conexão Perdida',
+      [DisconnectReason.connectionReplaced]: 'Conexão Substituída (outro dispositivo)',
+      [DisconnectReason.loggedOut]: 'Deslogado',
+      [DisconnectReason.restartRequired]: 'Reinício Necessário',
+      [DisconnectReason.timedOut]: 'Tempo Esgotado',
+      [DisconnectReason.unavailableService]: 'Serviço Indisponível'
+    };
+
+    return reasons[statusCode] || `Código ${statusCode} - Desconhecido`;
+  }
+
+  private clearSessionDir(sessionDir: string): void {
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+        logger.info('Session directory cleared', { sessionDir });
+      }
+    } catch (error) {
+      logger.warn('Could not clear session directory', { error, sessionDir });
+    }
   }
 }

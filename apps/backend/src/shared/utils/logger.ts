@@ -11,8 +11,18 @@ const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'HH:mm:ss' }),
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
+    // Garantir que message seja uma string
+    let messageStr = message;
+    if (typeof message === 'object') {
+      try {
+        messageStr = JSON.stringify(message, null, 2);
+      } catch (e) {
+        messageStr = '[Complex Object]';
+      }
+    }
+
     const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
-    return `${timestamp} [${level}]: ${message} ${metaStr}`;
+    return `${timestamp} [${level}]: ${messageStr} ${metaStr}`;
   })
 );
 
@@ -61,3 +71,13 @@ const logsDir = process.env.LOG_FILE_PATH || './logs';
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
+
+// Add trace method for Baileys compatibility
+// Baileys expects a logger with trace, debug, info, warn, error methods
+(logger as any).trace = (message: any, ...meta: any[]) => {
+  const processedMessage = typeof message === 'object' && message !== null
+    ? JSON.stringify(message)
+    : message;
+
+  logger.debug(processedMessage, ...meta);
+};

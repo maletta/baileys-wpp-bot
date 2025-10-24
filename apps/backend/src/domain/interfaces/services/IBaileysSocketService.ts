@@ -45,6 +45,9 @@ export interface IBaileysSocketService {
 
   // Event Listeners
   onConnectionUpdate(callback: (state: ConnectionState) => void): void;
+  onQrCodeGenerated(callback: (qrCode: string, sessionId: string) => void): void;
+  onConnectionEstablished(callback: (sessionId: string, deviceInfo: any) => void): void;
+  onConnectionFailed(callback: (sessionId: string, error: string) => void): void;
   onGroupJoin(callback: (groupData: BaileysGroupData) => void): void;
   onParticipantJoin(callback: (groupId: string, participantId: string) => void): void;
   onParticipantLeave(callback: (groupId: string, participantIds: string[]) => void): void;

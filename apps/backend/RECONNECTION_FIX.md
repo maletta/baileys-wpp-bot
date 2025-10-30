@@ -1,14 +1,27 @@
 # Correção: Reconexão Automática do Baileys
 
-## 🐛 Problema Identificado
+## 🐛 Problemas Identificados
 
-Ao tentar conectar ao WhatsApp, o sistema gerava o QR Code com sucesso, mas logo após fechava a conexão com o erro:
+### Problema Principal (Resolvido - 30/10/2025)
+
+Ao tentar conectar ao WhatsApp via QR Code, o sistema apresentava o seguinte comportamento:
+
+1. **QR Code gerado com sucesso**
+2. **Erro 515 (restartRequired)**: "Stream Errored (restart required)"
+3. **Tentativa de reconexão automática**
+4. **Erro 401 (loggedOut)**: "Connection Failure"
+5. **Sistema fica em loop de falha**
 
 ```
-Stream Errored (restart required)
+21:27:19 [info]: QR Code generated
+21:27:47 [info]: Connection closed - statusCode: 515 (Reinício Necessário)
+21:27:47 [info]: Attempting to reconnect
+21:28:22 [info]: Connection closed - statusCode: 401 (Deslogado)
 ```
 
-E não reconectava automaticamente, deixando o sistema em estado de desconexão permanente.
+### Problema Original (Resolvido anteriormente)
+
+O sistema gerava o QR Code mas não reconectava automaticamente após desconexões temporárias.
 
 ## 🔍 Análise do Problema
 
@@ -96,42 +109,90 @@ private shouldReconnect(statusCode: number | undefined): boolean {
 }
 ```
 
-**Quando RECONECTA:**
+**Quando RECONECTA automaticamente:**
 
-- `DisconnectReason.restartRequired` ✅
-- `DisconnectReason.connectionLost` ✅
-- `DisconnectReason.connectionClosed` ✅
-- `DisconnectReason.timedOut` ✅
-- `DisconnectReason.unavailableService` ✅
-- `DisconnectReason.connectionReplaced` ✅
+- `DisconnectReason.connectionLost` ✅ (408 - Conexão perdida temporária)
+- `DisconnectReason.connectionClosed` ✅ (428 - Conexão fechada)
+- `DisconnectReason.timedOut` ✅ (408 - Timeout)
+- `DisconnectReason.unavailableService` ✅ (503 - Serviço indisponível)
+- `DisconnectReason.connectionReplaced` ✅ (440 - Conectado em outro lugar)
 
-**Quando NÃO reconecta:**
+**Quando NÃO reconecta (limpa sessão e exige novo QR code):**
 
-- `DisconnectReason.loggedOut` ❌ (usuário fez logout intencional)
-- `DisconnectReason.badSession` ❌ (sessão corrompida, precisa novo QR)
+- `DisconnectReason.loggedOut` ❌ (401 - Usuário fez logout intencional)
+- `DisconnectReason.badSession` ❌ (500 - Credenciais corrompidas/inválidas)
+- `DisconnectReason.restartRequired` ❌ (515 - Stream error que corrompe a sessão) ⭐ **ATUALIZADO 30/10/2025**
 
-### 3. Método Auxiliar: getDisconnectReason()
+### 3. Correção Crítica do Erro 515 (30/10/2025)
+
+**Problema Identificado:**
+
+O erro 515 (restartRequired) estava configurado para reconectar automaticamente, mas isso causava um loop de falhas:
+
+```
+QR Code gerado → Erro 515 → Tenta reconectar → Erro 401 → Falha definitiva
+```
+
+**Causa Raiz:**
+
+Quando o WhatsApp retorna erro 515 ("Stream Errored - restart required"), significa que houve um problema fundamental na stream que corrompeu a sessão. Tentar reconectar com a mesma sessão resulta em erro 401 (loggedOut) porque as credenciais ficaram inválidas.
+
+**Solução Implementada:**
+
+Adicionar `DisconnectReason.restartRequired` (515) à lista de erros que **NÃO** devem reconectar automaticamente:
+
+```typescript
+private shouldReconnect(statusCode: number | undefined): boolean {
+  const doNotReconnect = [
+    DisconnectReason.loggedOut,           // Usuário fez logout
+    DisconnectReason.badSession,          // Sessão inválida/corrompida
+    DisconnectReason.restartRequired,     // Requer reinício completo com novo QR code ⭐
+  ];
+  return !doNotReconnect.includes(statusCode);
+}
+```
+
+**Comportamento Correto Agora:**
+
+```
+QR Code gerado → Erro 515 → Limpa sessão → Aguarda novo QR code
+```
+
+**Logs Melhorados:**
+
+```typescript
+logger.warn("Connection requires new session", {
+  sessionId,
+  statusCode,
+  reason: this.getDisconnectReason(statusCode),
+  message: "Sessão será limpa. Um novo QR code será necessário.",
+});
+```
+
+### 4. Método Auxiliar: getDisconnectReason()
 
 Criado método para logging descritivo dos motivos de desconexão:
 
 ```typescript
 private getDisconnectReason(statusCode: number | undefined): string {
+  // Nota: connectionLost e timedOut têm o mesmo valor (408), então só incluímos um
   const reasons: Record<number, string> = {
     [DisconnectReason.badSession]: 'Sessão Inválida',
     [DisconnectReason.connectionClosed]: 'Conexão Fechada',
-    [DisconnectReason.connectionLost]: 'Conexão Perdida',
+    [DisconnectReason.timedOut]: 'Tempo Esgotado / Conexão Perdida', // 408
     [DisconnectReason.connectionReplaced]: 'Conexão Substituída (outro dispositivo)',
     [DisconnectReason.loggedOut]: 'Deslogado',
     [DisconnectReason.restartRequired]: 'Reinício Necessário',
-    [DisconnectReason.timedOut]: 'Tempo Esgotado',
-    [DisconnectReason.unavailableService]: 'Serviço Indisponível'
+    [DisconnectReason.unavailableService]: 'Serviço Indisponível',
+    403: 'Acesso Negado (Forbidden)',
+    411: 'Incompatibilidade Multi-Dispositivo'
   };
 
   return reasons[statusCode] || `Código ${statusCode} - Desconhecido`;
 }
 ```
 
-### 4. Remoção da Limpeza Automática de Sessões
+### 5. Remoção da Limpeza Automática de Sessões
 
 **Antes:**
 

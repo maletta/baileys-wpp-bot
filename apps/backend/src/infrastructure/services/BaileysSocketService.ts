@@ -343,6 +343,13 @@ export class BaileysSocketService implements IBaileysSocketService {
           }, 5000);
         } else {
           // Conexão foi deslogada ou erro crítico - limpar dados da sessão
+          logger.warn('Connection requires new session', {
+            sessionId,
+            statusCode,
+            reason: this.getDisconnectReason(statusCode),
+            message: 'Sessão será limpa. Um novo QR code será necessário.'
+          });
+
           const sessionDir = path.join(this.sessionPath, sessionId);
           this.clearSessionDir(sessionDir);
 
@@ -395,38 +402,181 @@ export class BaileysSocketService implements IBaileysSocketService {
     });
 
     // Group participant updates
-    this.socket.ev.on('group-participants.update', (update) => {
+    this.socket.ev.on('group-participants.update', async (update) => {
+      // ========================================
+      // LOG COMPLETO DO EVENTO DE PARTICIPANTES
+      // ========================================
+      console.log('\n\n========== GROUP PARTICIPANTS UPDATE EVENT ==========');
+      console.log('OBJETO COMPLETO DO EVENTO:');
+      console.log(JSON.stringify(update, null, 2));
+      console.log('====================================================\n');
+
       const { id: groupId, participants, action } = update;
       const participantIds = participants.map((p: any) => typeof p === 'string' ? p : p.id);
 
       switch (action) {
         case 'add':
+          console.log('\n🟢 EVENTO: PARTICIPANTE(S) ADICIONADO(S) AO GRUPO');
+          console.log('Group ID:', groupId);
+          console.log('Participants IDs:', participantIds);
+
+          // Buscar dados completos do grupo
+          try {
+            console.log('\n--- Buscando metadados completos do grupo ---');
+            const groupMetadata = await this.socket!.groupMetadata(groupId);
+            console.log('METADADOS COMPLETOS DO GRUPO:');
+            console.log(JSON.stringify(groupMetadata, null, 2));
+          } catch (error) {
+            console.error('Erro ao buscar metadados do grupo:', error);
+          }
+
+          // Para cada participante que entrou, buscar dados individuais
+          for (const participantId of participantIds) {
+            console.log(`\n--- Dados do participante: ${participantId} ---`);
+
+            try {
+              // Verificar se o número está no WhatsApp e obter informações
+              console.log('Tentando buscar dados com onWhatsApp()...');
+              const onWhatsAppData = await this.socket!.onWhatsApp(participantId);
+              console.log('RESULTADO onWhatsApp():');
+              console.log(JSON.stringify(onWhatsAppData, null, 2));
+            } catch (error) {
+              console.error('Erro ao buscar onWhatsApp:', error);
+            }
+
+            try {
+              // Buscar foto de perfil do participante
+              console.log('Tentando buscar foto de perfil...');
+              const profilePicUrl = await this.socket!.profilePictureUrl(participantId, 'image');
+              console.log('URL DA FOTO DE PERFIL:', profilePicUrl);
+            } catch (error) {
+              console.error('Erro ao buscar foto de perfil (pode não ter):', error);
+            }
+
+            try {
+              // Buscar status do participante
+              console.log('Tentando buscar status...');
+              const status = await this.socket!.fetchStatus(participantId);
+              console.log('STATUS DO PARTICIPANTE:');
+              console.log(JSON.stringify(status, null, 2));
+            } catch (error) {
+              console.error('Erro ao buscar status:', error);
+            }
+
+            // Buscar informações do participante no grupo
+            try {
+              console.log('Buscando informações atualizadas do grupo para ver dados do participante...');
+              const updatedGroupMeta = await this.socket!.groupMetadata(groupId);
+              const participantInGroup = updatedGroupMeta.participants.find(p => p.id === participantId);
+              console.log('DADOS DO PARTICIPANTE NO GRUPO:');
+              console.log(JSON.stringify(participantInGroup, null, 2));
+            } catch (error) {
+              console.error('Erro ao buscar dados do participante no grupo:', error);
+            }
+
+            console.log(`--- Fim dos dados de ${participantId} ---\n`);
+          }
+
+          // Chamar callbacks originais
           participantIds.forEach(participantId => {
             this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId));
           });
           break;
 
         case 'remove':
+          console.log('\n🔴 EVENTO: PARTICIPANTE(S) REMOVIDO(S) DO GRUPO');
+          console.log('Group ID:', groupId);
+          console.log('Participants IDs:', participantIds);
+
           this.participantLeaveCallbacks.forEach(callback => callback(groupId, participantIds));
           break;
 
         case 'promote':
         case 'demote':
+          console.log(`\n⚪ EVENTO: PARTICIPANTE(S) ${action.toUpperCase()}`);
+          console.log('Group ID:', groupId);
+          console.log('Participants IDs:', participantIds);
+
           this.groupUpdateCallbacks.forEach(callback => callback(groupId, action, participantIds));
           break;
       }
+
+      console.log('\n========== FIM DO EVENTO ==========\n\n');
     });
 
     // Messages (for participant join/leave detection via message stubs)
-    this.socket.ev.on('messages.upsert', (messageUpdate) => {
-      messageUpdate.messages.forEach(message => {
+    this.socket.ev.on('messages.upsert', async (messageUpdate) => {
+      console.log('\n\n========== MESSAGES UPSERT EVENT ==========');
+      console.log('OBJETO COMPLETO DO MESSAGE UPDATE:');
+      console.log(JSON.stringify(messageUpdate, null, 2));
+      console.log('==========================================\n');
+
+      for (const message of messageUpdate.messages) {
         // Handle message stub types for participant events
+        console.log('\nVerificando message stub type:', message.messageStubType);
+
         if (message.messageStubType === 27) { // Participant joined
+          console.log('\n🟢 MESSAGE STUB: PARTICIPANTE ENTROU (tipo 27)');
+          console.log('MENSAGEM COMPLETA:');
+          console.log(JSON.stringify(message, null, 2));
+
           const groupId = message.key.remoteJid!;
           const participantId = message.participant!;
+
+          console.log('Group ID:', groupId);
+          console.log('Participant ID:', participantId);
+
+          // Buscar dados do participante via message stub
+          try {
+            console.log('\n--- Buscando dados do participante que entrou ---');
+
+            // messageStubParameters pode conter informações adicionais
+            if (message.messageStubParameters) {
+              console.log('MESSAGE STUB PARAMETERS:');
+              console.log(JSON.stringify(message.messageStubParameters, null, 2));
+            }
+
+            // Buscar metadados do grupo
+            const groupMetadata = await this.socket!.groupMetadata(groupId);
+            const participantInGroup = groupMetadata.participants.find(p => p.id === participantId);
+            console.log('PARTICIPANTE NO GRUPO:');
+            console.log(JSON.stringify(participantInGroup, null, 2));
+
+            // Tentar buscar informações adicionais
+            try {
+              const onWhatsAppData = await this.socket!.onWhatsApp(participantId);
+              console.log('DADOS onWhatsApp:');
+              console.log(JSON.stringify(onWhatsAppData, null, 2));
+            } catch (error) {
+              console.error('Erro ao buscar onWhatsApp:', error);
+            }
+
+          } catch (error) {
+            console.error('Erro ao buscar dados do participante:', error);
+          }
+
           this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId));
         }
-      });
+
+        // Logar outros tipos de message stubs relacionados a grupos
+        if (message.messageStubType) {
+          const stubTypes: Record<number, string> = {
+            27: 'Participante entrou',
+            28: 'Participante saiu',
+            29: 'Participante removido',
+            30: 'Participante promovido a admin',
+            31: 'Participante removido de admin',
+            32: 'Grupo criado',
+            // Adicione mais conforme necessário
+          };
+
+          if (stubTypes[message.messageStubType]) {
+            console.log(`\nMESSAGE STUB DETECTADO: ${stubTypes[message.messageStubType]} (tipo ${message.messageStubType})`);
+          }
+        }
+      }
+
+      console.log('\n========== FIM DO MESSAGES EVENT ==========\n\n');
     });
   }
 
@@ -464,10 +614,11 @@ export class BaileysSocketService implements IBaileysSocketService {
   private shouldReconnect(statusCode: number | undefined): boolean {
     if (!statusCode) return true; // Sem código específico, tenta reconectar
 
-    // Não reconectar em casos específicos
+    // Não reconectar em casos específicos que requerem novo QR code
     const doNotReconnect = [
       DisconnectReason.loggedOut,           // Usuário fez logout
       DisconnectReason.badSession,          // Sessão inválida/corrompida
+      DisconnectReason.restartRequired,     // Requer reinício completo com novo QR code
     ];
 
     return !doNotReconnect.includes(statusCode);
@@ -479,15 +630,17 @@ export class BaileysSocketService implements IBaileysSocketService {
   private getDisconnectReason(statusCode: number | undefined): string {
     if (!statusCode) return 'Desconhecido';
 
+    // Nota: connectionLost e timedOut têm o mesmo valor (408), então só incluímos um
     const reasons: Record<number, string> = {
       [DisconnectReason.badSession]: 'Sessão Inválida',
       [DisconnectReason.connectionClosed]: 'Conexão Fechada',
-      [DisconnectReason.connectionLost]: 'Conexão Perdida',
+      [DisconnectReason.timedOut]: 'Tempo Esgotado / Conexão Perdida', // 408 (connectionLost tem mesmo valor)
       [DisconnectReason.connectionReplaced]: 'Conexão Substituída (outro dispositivo)',
       [DisconnectReason.loggedOut]: 'Deslogado',
       [DisconnectReason.restartRequired]: 'Reinício Necessário',
-      [DisconnectReason.timedOut]: 'Tempo Esgotado',
-      [DisconnectReason.unavailableService]: 'Serviço Indisponível'
+      [DisconnectReason.unavailableService]: 'Serviço Indisponível',
+      403: 'Acesso Negado (Forbidden)',
+      411: 'Incompatibilidade Multi-Dispositivo'
     };
 
     return reasons[statusCode] || `Código ${statusCode} - Desconhecido`;

@@ -12,6 +12,8 @@ import QRCode from 'qrcode';
 import QRCodeTerminal from 'qrcode-terminal';
 import pino from 'pino';
 import path from 'path';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import {
   IBaileysSocketService,
   ConnectionState,
@@ -27,6 +29,9 @@ const baileysLogger = pino({
   level: process.env.BAILEYS_LOG_LEVEL || 'silent' // Opções: 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'
 });
 
+/** Ficheiro em SESSION_PATH com o último sessionId (restaurar Baileys após reinício do backend). */
+const ACTIVE_SESSION_MARKER = '.active-session';
+
 export class BaileysSocketService implements IBaileysSocketService {
   private socket: WASocket | null = null;
   private connectionState: ConnectionState = { isConnected: false };
@@ -34,6 +39,8 @@ export class BaileysSocketService implements IBaileysSocketService {
   private qrCodeGenerationTimeout: NodeJS.Timeout | null = null;
   private qrCodePromiseResolve: ((value: string) => void) | null = null;
   private qrCodePromiseReject: ((reason: any) => void) | null = null;
+  /** Quando true, `connection:close` não reconecta nem apaga credenciais (shutdown do processo). */
+  private voluntaryShutdown = false;
 
   // Event callbacks
   private connectionUpdateCallbacks: Array<(state: ConnectionState) => void> = [];
@@ -45,11 +52,135 @@ export class BaileysSocketService implements IBaileysSocketService {
   private participantLeaveCallbacks: Array<(groupId: string, participantIds: string[]) => void> = [];
   private groupUpdateCallbacks: Array<(groupId: string, action: 'promote' | 'demote', participantIds: string[]) => void> = [];
 
+  private readonly sessionPath: string;
+
   constructor(
-    private readonly sessionPath: string,
+    sessionPathInput: string,
     private readonly browserName: string = 'Chrome',
     private readonly browserVersion: string = '1.0.0'
-  ) { }
+  ) {
+    this.sessionPath = path.isAbsolute(sessionPathInput)
+      ? path.normalize(sessionPathInput)
+      : path.resolve(process.cwd(), sessionPathInput);
+  }
+
+  /**
+   * Após reinício do Node, o Socket.IO e o WASocket são sempre novos.
+   * Credenciais ficam em disco (useMultiFileAuthState); este método recria o socket Baileys
+   * para voltar a ligar ao WhatsApp sem novo QR, quando ainda existe sessão válida.
+   */
+  async tryRestorePersistedSession(): Promise<void> {
+    if (this.socket) {
+      return;
+    }
+    try {
+      const sessionId = await this.resolveSessionIdToRestore();
+      if (!sessionId) {
+        const hint = await this.buildRestoreDebugHint();
+        logger.info('Nenhuma sessão Baileys persistida para restaurar', {
+          sessionPath: this.sessionPath,
+          sessionPathAbsolute: path.resolve(this.sessionPath),
+          ...hint
+        });
+        return;
+      }
+
+      this.currentSessionId = sessionId;
+      logger.info('Restaurando sessão WhatsApp a partir do disco', { sessionId });
+
+      await this.openSocketWithStoredAuth(sessionId);
+
+      logger.info('Socket Baileys recriado a partir de credenciais locais; handshake em curso', {
+        sessionId
+      });
+    } catch (error) {
+      logger.warn('Falha ao restaurar sessão Baileys (pode ser necessário novo QR)', {
+        error,
+        sessionPath: this.sessionPath
+      });
+      this.socket = null;
+      this.currentSessionId = null;
+    }
+  }
+
+  private async openSocketWithStoredAuth(sessionId: string): Promise<void> {
+    const sessionDir = path.join(this.sessionPath, sessionId);
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    const { version } = await getCachedBaileysVersion();
+
+    this.socket = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
+      },
+      printQRInTerminal: false,
+      browser: ['WhatsApp Bot', 'Chrome', '120.0.0'],
+      syncFullHistory: false,
+      markOnlineOnConnect: true,
+      generateHighQualityLinkPreview: true,
+      getMessage: this.getMessageFromMongoDB.bind(this),
+      logger: baileysLogger,
+      defaultQueryTimeoutMs: 60000,
+      retryRequestDelayMs: 250,
+      connectTimeoutMs: 60_000,
+      keepAliveIntervalMs: 30_000,
+      qrTimeout: 40_000,
+    });
+
+    this.setupEventListeners(saveCreds);
+    this.setupConnectionEventListener(sessionId);
+  }
+
+  private async persistActiveSessionMarker(sessionId: string): Promise<void> {
+    try {
+      await fs.mkdir(this.sessionPath, { recursive: true });
+      await fs.writeFile(path.join(this.sessionPath, ACTIVE_SESSION_MARKER), sessionId, 'utf8');
+    } catch (error) {
+      logger.warn('Não foi possível gravar marcador de sessão ativa', { error, sessionId });
+    }
+  }
+
+  private async clearActiveSessionMarker(): Promise<void> {
+    try {
+      await fs.unlink(path.join(this.sessionPath, ACTIVE_SESSION_MARKER));
+    } catch {
+      /* ignora */
+    }
+  }
+
+  private async resolveSessionIdToRestore(): Promise<string | null> {
+    const markerPath = path.join(this.sessionPath, ACTIVE_SESSION_MARKER);
+    try {
+      const fromFile = (await fs.readFile(markerPath, 'utf8')).trim();
+      if (fromFile) {
+        const credsPath = path.join(this.sessionPath, fromFile, 'creds.json');
+        if (existsSync(credsPath)) {
+          return fromFile;
+        }
+      }
+    } catch {
+      /* sem marcador */
+    }
+
+    try {
+      const entries = await fs.readdir(this.sessionPath, { withFileTypes: true });
+      let best: { id: string; mtime: number } | null = null;
+      for (const ent of entries) {
+        if (!ent.isDirectory()) continue;
+        const id = ent.name;
+        const credsPath = path.join(this.sessionPath, id, 'creds.json');
+        if (!existsSync(credsPath)) continue;
+        const st = await fs.stat(credsPath);
+        if (!best || st.mtimeMs > best.mtime) {
+          best = { id, mtime: st.mtimeMs };
+        }
+      }
+      return best?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   async createConnection(sessionId: string): Promise<string> {
     try {
@@ -136,10 +267,55 @@ export class BaileysSocketService implements IBaileysSocketService {
           const sessionDir = path.join(this.sessionPath, sessionIdToClean);
           this.clearSessionDir(sessionDir);
         }
+        await this.clearActiveSessionMarker();
       }
     } catch (error) {
       logger.error('Error disconnecting', { error });
       throw error;
+    }
+  }
+
+  async shutdownPreservingCredentials(): Promise<void> {
+    if (this.qrCodeGenerationTimeout) {
+      clearTimeout(this.qrCodeGenerationTimeout);
+      this.qrCodeGenerationTimeout = null;
+    }
+    this.qrCodePromiseResolve = null;
+    this.qrCodePromiseReject = null;
+
+    if (!this.socket) {
+      return;
+    }
+
+    this.voluntaryShutdown = true;
+    try {
+      logger.info('Encerramento do processo: a fechar Baileys sem logout (credenciais mantidas)', {
+        sessionId: this.currentSessionId,
+        sessionPath: this.sessionPath
+      });
+      this.socket.end(undefined);
+    } catch (error) {
+      logger.warn('Erro ao fechar socket Baileys no shutdown', { error });
+    }
+    this.socket = null;
+    this.updateConnectionState({ isConnected: false });
+    if (this.voluntaryShutdown) {
+      this.voluntaryShutdown = false;
+    }
+  }
+
+  private async buildRestoreDebugHint(): Promise<Record<string, unknown>> {
+    try {
+      const entries = await fs.readdir(this.sessionPath, { withFileTypes: true });
+      const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+      const dirsMissingCreds = dirs.filter((id) => !existsSync(path.join(this.sessionPath, id, 'creds.json')));
+      return {
+        subdirCount: dirs.length,
+        subdirSample: dirs.slice(0, 10),
+        subdirsWithoutCredsJson: dirsMissingCreds.slice(0, 10)
+      };
+    } catch {
+      return { couldNotReadSessionPath: true };
     }
   }
 
@@ -284,6 +460,16 @@ export class BaileysSocketService implements IBaileysSocketService {
 
       // Conexão fechada
       if (connection === 'close') {
+        if (this.voluntaryShutdown) {
+          this.voluntaryShutdown = false;
+          this.socket = null;
+          this.updateConnectionState({ isConnected: false });
+          logger.info('Baileys encerrado no shutdown do processo; credenciais mantidas em disco', {
+            sessionId
+          });
+          return;
+        }
+
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
         const errorMessage = (lastDisconnect?.error as Boom)?.message || 'Conexão fechada';
 
@@ -320,29 +506,7 @@ export class BaileysSocketService implements IBaileysSocketService {
           setTimeout(async () => {
             try {
               logger.info('Reconnecting to WhatsApp', { sessionId });
-              const sessionDir = path.join(this.sessionPath, sessionId);
-              const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-              const { version } = await getCachedBaileysVersion();
-
-              this.socket = makeWASocket({
-                version,
-                auth: {
-                  creds: state.creds,
-                  keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
-                },
-                printQRInTerminal: false,
-                browser: ['WhatsApp Bot', 'Chrome', '120.0.0'],
-                syncFullHistory: false,
-                markOnlineOnConnect: true,
-                generateHighQualityLinkPreview: true,
-                getMessage: this.getMessageFromMongoDB.bind(this),
-                logger: baileysLogger,
-                defaultQueryTimeoutMs: 60000,
-                keepAliveIntervalMs: 30_000,
-              });
-
-              this.setupEventListeners(saveCreds);
-              this.setupConnectionEventListener(sessionId);
+              await this.openSocketWithStoredAuth(sessionId);
             } catch (error) {
               logger.error('Failed to reconnect', { error, sessionId });
               this.connectionFailedCallbacks.forEach(callback =>
@@ -361,6 +525,7 @@ export class BaileysSocketService implements IBaileysSocketService {
 
           const sessionDir = path.join(this.sessionPath, sessionId);
           this.clearSessionDir(sessionDir);
+          void this.clearActiveSessionMarker();
 
           this.connectionFailedCallbacks.forEach(callback =>
             callback(sessionId, errorMessage)
@@ -387,6 +552,8 @@ export class BaileysSocketService implements IBaileysSocketService {
           sessionId,
           deviceInfo
         });
+
+        void this.persistActiveSessionMarker(sessionId);
 
         // Notificar todos os listeners de conexão estabelecida
         this.connectionEstablishedCallbacks.forEach(callback =>

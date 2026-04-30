@@ -37,6 +37,13 @@ export interface IBaileysSocketService {
   createConnection(sessionId: string): Promise<string>; // Returns QR code
   getConnectionState(): Promise<ConnectionState>;
   disconnect(): Promise<void>;
+  /**
+   * Fecha o socket Baileys sem logout no WhatsApp e sem apagar credenciais em disco.
+   * Usar em SIGINT/SIGTERM para poder restaurar a sessão após reiniciar o processo.
+   */
+  shutdownPreservingCredentials(): Promise<void>;
+  /** Recria o socket Baileys a partir de credenciais em disco (após reinício do processo). */
+  tryRestorePersistedSession(): Promise<void>;
 
   // Group Operations
   getGroupData(groupId: string): Promise<BaileysGroupData>;

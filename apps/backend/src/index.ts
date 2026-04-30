@@ -212,6 +212,8 @@ class App {
       await this.prisma.$connect();
       logger.info('Database connected successfully');
 
+      await this.baileysService.tryRestorePersistedSession();
+
       // Start server
       this.server.listen(port, () => {
         logger.info(`Server running on port ${port}`);
@@ -228,7 +230,7 @@ class App {
     logger.info('Shutting down server...');
 
     try {
-      await this.baileysService.disconnect();
+      await this.baileysService.shutdownPreservingCredentials();
       await this.prisma.$disconnect();
       this.server.close();
       logger.info('Server shut down successfully');

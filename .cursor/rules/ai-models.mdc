@@ -1,0 +1,24 @@
+---
+description: Escolha de modelos de IA no Cursor (qualidade, Camada 1 vs. dia a dia, previews)
+globs: "**/*"
+---
+
+# Modelos de IA neste repositório
+
+Consulte `docs/ai-model-strategy.md` para a política completa, user story piloto US-PILOTO-001 e rubrica de comparação.
+
+## Defaults (Cursor)
+
+- **Implementação contínua / agente no repo**: preferir **composer-2**.
+- **Micro-ajustes** (pequeno escopo, um arquivo ou rename): **composer-2-fast** é aceitável.
+- **Milestones, modelo de dados CRM, núcleo Baileys, segurança de fluxos**: **claude-4-sonnet** ou **gpt-5.2-xhigh** (ou **gpt-5.2-high**).
+- **Revisão ou passagem final antes de merge** em reconexão, deduplicação de mensagens, rate limit de comandos: **claude-4-sonnet** ou **gpt-5.2-xhigh**.
+
+## Experimentais (exigem validação extra)
+
+- **gpt-5.3-codex-spark-preview** (qualquer variante): ok para implementação/refactor; decisões irreversíveis exigem validação com Camada 1 (Sonnet ou gpt-5.2-xhigh/high).
+- **gemini-3.1-pro-preview**: útil para contexto longo; não substituir checklist de merge do núcleo WhatsApp sem testes e revisão.
+
+## Volume only
+
+**gpt-5.4-mini-\***, **gpt-5.2-fast**, **claude-4.5-haiku** (sem thinking): somente tarefas mecânicas — não para estado crítico do WhatsApp ou regras do CRM como única escolha.

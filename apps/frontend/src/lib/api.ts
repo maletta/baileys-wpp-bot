@@ -1,8 +1,10 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { clearAuthStorage } from '@/lib/authStorage';
 import { storage } from '@/lib/utils';
 import type {
   ApiResponse,
   AuthResponse,
+  User,
   ConnectionState,
   QrCodeResponse,
   Group,
@@ -22,7 +24,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api',
+      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4444/api',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -51,8 +53,7 @@ class ApiClient {
       (error) => {
         if (error.response?.status === 401) {
           // Token expired or invalid
-          storage.remove('accessToken');
-          storage.remove('user');
+          clearAuthStorage();
 
           // Redirect to login if not already there
           if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
@@ -68,6 +69,14 @@ class ApiClient {
   async googleAuth(token: string): Promise<AuthResponse> {
     const response = await this.client.post<ApiResponse<AuthResponse>>('/auth/google', {
       token
+    });
+    return response.data.data!;
+  }
+
+  /** timeout curto no bootstrap evita “loading” longo quando o backend está offline */
+  async getProfile(options?: { timeoutMs?: number }): Promise<{ user: User }> {
+    const response = await this.client.get<ApiResponse<{ user: User }>>('/auth/profile', {
+      timeout: options?.timeoutMs ?? 30000,
     });
     return response.data.data!;
   }

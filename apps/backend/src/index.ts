@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import { PrismaClient } from '@prisma/client';
@@ -10,13 +11,17 @@ import { PrismaClient } from '@prisma/client';
 // Import infrastructure
 import { BaileysSocketService } from '@/infrastructure/services/BaileysSocketService';
 import { UserRepository } from '@/infrastructure/repositories/UserRepository';
+import { QrCodeTryRepository } from '@/infrastructure/repositories/QrCodeTryRepository';
 
 // Import application
 import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase';
 
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
+import { SessionSocketController } from '@/presentation/controllers/SessionSocketController';
 import { AuthMiddleware } from '@/presentation/middlewares/authMiddleware';
+import { createAuthRoutes } from '@/presentation/routes/authRoutes';
+import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
@@ -30,6 +35,7 @@ class App {
   // Services
   private baileysService!: BaileysSocketService;
   private userRepository!: UserRepository;
+  private qrCodeTryRepository!: QrCodeTryRepository;
   private authMiddleware!: AuthMiddleware;
 
   // Use Cases
@@ -37,13 +43,14 @@ class App {
 
   // Controllers
   private sessionController!: SessionController;
+  private sessionSocketController!: SessionSocketController;
 
   constructor() {
     this.express = express();
     this.server = createServer(this.express);
     this.io = new Server(this.server, {
       cors: {
-        origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+        origin: process.env.CORS_ORIGIN || "http://localhost:3333",
         methods: ["GET", "POST"]
       }
     });
@@ -65,6 +72,7 @@ class App {
   private initializeServices(): void {
     // Initialize repositories
     this.userRepository = new UserRepository(this.prisma);
+    this.qrCodeTryRepository = new QrCodeTryRepository(this.prisma);
 
     // Initialize middleware
     this.authMiddleware = new AuthMiddleware(
@@ -92,13 +100,22 @@ class App {
       this.createQrCodeUseCase,
       this.baileysService
     );
+
+    // Initialize Socket.IO controller for session management
+    this.sessionSocketController = new SessionSocketController(
+      this.io,
+      this.baileysService,
+      this.userRepository,
+      this.qrCodeTryRepository,
+      process.env.JWT_SECRET || 'default-secret'
+    );
   }
 
   private initializeMiddlewares(): void {
     // Security middlewares
     this.express.use(helmet());
     this.express.use(cors({
-      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+      origin: process.env.CORS_ORIGIN || "http://localhost:3333",
       credentials: true
     }));
 
@@ -110,13 +127,17 @@ class App {
     // Body parsing
     this.express.use(express.json({ limit: '10mb' }));
     this.express.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+    // Cookie parsing
+    this.express.use(cookieParser());
   }
 
   private initializeRoutes(): void {
-    // Health check
-    this.express.get('/health', (req, res) => {
-      res.json({ status: 'OK', timestamp: new Date().toISOString() });
-    });
+    // Health check routes
+    this.express.use('/health', createHealthRoutes(this.prisma, this.baileysService));
+
+    // Auth routes
+    this.express.use('/api/auth', createAuthRoutes(this.prisma));
 
     // Session routes
     this.express.post('/api/session/create-qr-code',
@@ -149,19 +170,9 @@ class App {
   }
 
   private initializeSocketIO(): void {
-    this.io.on('connection', (socket) => {
-      logger.info('Socket client connected', { socketId: socket.id });
-
-      // Handle session frontend join
-      socket.on('session-frontend-join', (sessionId: string) => {
-        logger.info('Frontend joined session', { sessionId, socketId: socket.id });
-        socket.join(`session-${sessionId}`);
-      });
-
-      socket.on('disconnect', () => {
-        logger.info('Socket client disconnected', { socketId: socket.id });
-      });
-    });
+    // Socket.IO is now handled by SessionSocketController
+    // The controller is initialized in initializeControllers()
+    logger.info('Socket.IO initialized via SessionSocketController');
   }
 
   private initializeBaileysEvents(): void {
@@ -201,6 +212,8 @@ class App {
       await this.prisma.$connect();
       logger.info('Database connected successfully');
 
+      await this.baileysService.tryRestorePersistedSession();
+
       // Start server
       this.server.listen(port, () => {
         logger.info(`Server running on port ${port}`);
@@ -217,7 +230,7 @@ class App {
     logger.info('Shutting down server...');
 
     try {
-      await this.baileysService.disconnect();
+      await this.baileysService.shutdownPreservingCredentials();
       await this.prisma.$disconnect();
       this.server.close();
       logger.info('Server shut down successfully');

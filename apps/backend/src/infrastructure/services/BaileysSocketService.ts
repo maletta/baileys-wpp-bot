@@ -5,7 +5,6 @@ import makeWASocket, {
   DisconnectReason,
   GroupMetadata,
   proto,
-  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
@@ -21,6 +20,7 @@ import {
   SendMessageOptions
 } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
+import { getCachedBaileysVersion } from '@/shared/utils/baileysVersionCache';
 
 // Logger do Pino para Baileys (mais silencioso)
 const baileysLogger = pino({
@@ -64,8 +64,8 @@ export class BaileysSocketService implements IBaileysSocketService {
       // Setup authentication state
       const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
-      // Buscar versão mais recente do WhatsApp Web
-      const { version, isLatest } = await fetchLatestBaileysVersion();
+      // Buscar versão do WhatsApp Web (com cache de 24h)
+      const { version, isLatest } = await getCachedBaileysVersion();
       logger.info('Using WhatsApp Web version', { version: version.join('.'), isLatest });
 
       // Create socket connection
@@ -85,6 +85,7 @@ export class BaileysSocketService implements IBaileysSocketService {
         defaultQueryTimeoutMs: 60000,
         retryRequestDelayMs: 250,
         connectTimeoutMs: 60_000,
+        keepAliveIntervalMs: 30_000, // Mantém conexão viva
         qrTimeout: 40_000,
       });
 
@@ -308,13 +309,20 @@ export class BaileysSocketService implements IBaileysSocketService {
 
         if (shouldReconnect) {
           // Reconectar automaticamente após 5 segundos
-          logger.info('Attempting to reconnect', { sessionId, delaySeconds: 5 });
+          const isRestartRequired = statusCode === DisconnectReason.restartRequired;
+          logger.info('Attempting to reconnect', {
+            sessionId,
+            delaySeconds: 5,
+            statusCode,
+            reason: this.getDisconnectReason(statusCode),
+            note: isRestartRequired ? 'Erro 515 é comum na primeira conexão' : undefined
+          });
           setTimeout(async () => {
             try {
               logger.info('Reconnecting to WhatsApp', { sessionId });
               const sessionDir = path.join(this.sessionPath, sessionId);
               const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-              const { version } = await fetchLatestBaileysVersion();
+              const { version } = await getCachedBaileysVersion();
 
               this.socket = makeWASocket({
                 version,
@@ -330,6 +338,7 @@ export class BaileysSocketService implements IBaileysSocketService {
                 getMessage: this.getMessageFromMongoDB.bind(this),
                 logger: baileysLogger,
                 defaultQueryTimeoutMs: 60000,
+                keepAliveIntervalMs: 30_000,
               });
 
               this.setupEventListeners(saveCreds);
@@ -343,7 +352,7 @@ export class BaileysSocketService implements IBaileysSocketService {
           }, 5000);
         } else {
           // Conexão foi deslogada ou erro crítico - limpar dados da sessão
-          logger.warn('Connection requires new session', {
+          logger.warn('Connection requires new session - clearing session', {
             sessionId,
             statusCode,
             reason: this.getDisconnectReason(statusCode),
@@ -614,13 +623,14 @@ export class BaileysSocketService implements IBaileysSocketService {
   private shouldReconnect(statusCode: number | undefined): boolean {
     if (!statusCode) return true; // Sem código específico, tenta reconectar
 
-    // Não reconectar em casos específicos que requerem novo QR code
+    // Não reconectar apenas em casos específicos
     const doNotReconnect = [
       DisconnectReason.loggedOut,           // Usuário fez logout
       DisconnectReason.badSession,          // Sessão inválida/corrompida
-      DisconnectReason.restartRequired,     // Requer reinício completo com novo QR code
+      DisconnectReason.connectionReplaced,  // Conectado em outro lugar
     ];
 
+    // Nota: restartRequired (515) é COMUM durante primeira conexão e DEVE reconectar!
     return !doNotReconnect.includes(statusCode);
   }
 

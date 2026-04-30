@@ -466,6 +466,7 @@ Para outros problemas, consulte o [Guia de Troubleshooting](docs/troubleshooting
 ## 📞 Suporte
 
 - **Troubleshooting**: [Guia de Resolução de Problemas](docs/troubleshooting.md)
+- **IA no Cursor**: [Estratégia de modelos](docs/ai-model-strategy.md)
 - **Issues**: [GitHub Issues](https://github.com/seu-usuario/whatsapp-baileys-IA/issues)
 - **Documentação**: [/docs](./docs)
 - **Discussões**: [GitHub Discussions](https://github.com/seu-usuario/whatsapp-baileys-IA/discussions)

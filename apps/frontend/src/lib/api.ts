@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { clearAuthStorage } from '@/lib/authStorage';
 import { storage } from '@/lib/utils';
 import type {
   ApiResponse,
@@ -52,8 +53,7 @@ class ApiClient {
       (error) => {
         if (error.response?.status === 401) {
           // Token expired or invalid
-          storage.remove('accessToken');
-          storage.remove('user');
+          clearAuthStorage();
 
           // Redirect to login if not already there
           if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
@@ -73,8 +73,11 @@ class ApiClient {
     return response.data.data!;
   }
 
-  async getProfile(): Promise<{ user: User }> {
-    const response = await this.client.get<ApiResponse<{ user: User }>>('/auth/profile');
+  /** timeout curto no bootstrap evita “loading” longo quando o backend está offline */
+  async getProfile(options?: { timeoutMs?: number }): Promise<{ user: User }> {
+    const response = await this.client.get<ApiResponse<{ user: User }>>('/auth/profile', {
+      timeout: options?.timeoutMs ?? 30000,
+    });
     return response.data.data!;
   }
 

@@ -1,9 +1,14 @@
 "use client"
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import axios from 'axios';
 import { api } from '@/lib/api';
+import { isJwtExpired, isLikelyJwtString } from '@/lib/jwtClient';
+import { clearAuthStorage } from '@/lib/authStorage';
 import { storage } from '@/lib/utils';
 import type { User, AuthResponse } from '@/types/api';
+
+const PROFILE_BOOTSTRAP_TIMEOUT_MS = 8000;
 
 interface AuthContextType {
   user: User | null;
@@ -39,19 +44,57 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const initAuth = async () => {
       try {
         const token = storage.get('accessToken');
-        const savedUser = storage.get('user');
+        const savedUser = storage.get('user') as User | null;
 
-        if (token && savedUser) {
-          // Verificar se o token ainda é válido fazendo uma requisição para o perfil
-          try {
-            const profile = await api.getProfile();
-            setUser(profile.user);
-          } catch (error) {
-            // Token inválido, limpar storage
-            storage.remove('accessToken');
-            storage.remove('user');
+        // Chaves órfãs (ex.: falha parcial ao gravar) — evita estado inconsistente
+        if ((token && !savedUser) || (!token && savedUser)) {
+          clearAuthStorage();
+          setUser(null);
+          return;
+        }
+
+        if (!token || !savedUser) {
+          return;
+        }
+
+        if (!isLikelyJwtString(token) || isJwtExpired(token)) {
+          console.warn('Sessão local expirada ou token inválido; limpando cache de auth.');
+          clearAuthStorage();
+          setUser(null);
+          return;
+        }
+
+        try {
+          const profile = await api.getProfile({ timeoutMs: PROFILE_BOOTSTRAP_TIMEOUT_MS });
+          setUser(profile.user);
+          storage.set('user', profile.user);
+        } catch (error) {
+          if (axios.isAxiosError(error) && error.response?.status === 401) {
+            clearAuthStorage();
             setUser(null);
+            return;
           }
+
+          // Backend offline, timeout ou 5xx: mantém sessão local se o JWT ainda não expirou
+          const isNetworkOrTimeout =
+            axios.isAxiosError(error) &&
+            !error.response &&
+            (error.code === 'ECONNABORTED' || error.message === 'Network Error');
+
+          const isServerError =
+            axios.isAxiosError(error) &&
+            error.response &&
+            error.response.status >= 500;
+
+          if ((isNetworkOrTimeout || isServerError) && !isJwtExpired(token)) {
+            console.warn('Não foi possível validar o perfil no servidor; usando dados em cache.', error);
+            setUser(savedUser);
+            return;
+          }
+
+          console.error('Falha ao validar sessão; limpando cache de auth.', error);
+          clearAuthStorage();
+          setUser(null);
         }
       } catch (error) {
         console.error('Erro ao inicializar autenticação:', error);
@@ -68,7 +111,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.log('userAuth - login - googleToken', googleToken);
       setIsLoading(true);
       const response = await api.googleAuth(googleToken);
-      console.log('userAuth - response', response);
+      console.log('userAuth.tsx - response', response);
 
       // Salvar dados no storage
       storage.set('accessToken', response.accessToken);
@@ -76,7 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(response.user);
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('useAuth.tsx - Erro no login:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -97,10 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         console.error('Erro ao fazer logout no backend:', error);
       }
 
-      // Limpar storage local
-      storage.remove('accessToken');
-      storage.remove('user');
-
+      clearAuthStorage();
       setUser(null);
     } catch (error) {
       console.error('Erro no logout:', error);

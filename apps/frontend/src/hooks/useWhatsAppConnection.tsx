@@ -72,6 +72,14 @@ export function useWhatsAppConnection(): UseWhatsAppConnectionReturn {
     socket.on('connect', () => {
       console.log('Socket conectado');
       checkStatusInternal();
+      // Handshake WhatsApp pode ainda estar em curso após restauração do backend
+      setTimeout(() => checkStatusInternal(), 2500);
+    });
+
+    socket.on('reconnect', () => {
+      console.log('Socket.IO reconectado ao servidor');
+      checkStatusInternal();
+      setTimeout(() => checkStatusInternal(), 2500);
     });
 
     socket.on('connect_error', (err) => {

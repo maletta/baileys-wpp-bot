@@ -19,10 +19,13 @@ import {
   ConnectionState,
   BaileysGroupData,
   BaileysParticipantData,
-  SendMessageOptions
+  SendMessageOptions,
+  BaileysParticipantRef,
+  ParticipantJoinContext
 } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
 import { getCachedBaileysVersion } from '@/shared/utils/baileysVersionCache';
+import util from 'util';
 
 // Logger do Pino para Baileys (mais silencioso)
 const baileysLogger = pino({
@@ -31,6 +34,16 @@ const baileysLogger = pino({
 
 /** Ficheiro em SESSION_PATH com o último sessionId (restaurar Baileys após reinício do backend). */
 const ACTIVE_SESSION_MARKER = '.active-session';
+
+/** Stubs comuns em grupos (protocolo WhatsApp; valores podem variar entre versões). */
+const MESSAGE_STUB_LABEL_PT: Record<number, string> = {
+  27: 'Participante entrou',
+  28: 'Participante saiu',
+  29: 'Participante removido',
+  30: 'Participante promovido a admin',
+  31: 'Participante removido de admin',
+  32: 'Grupo criado'
+};
 
 export class BaileysSocketService implements IBaileysSocketService {
   private socket: WASocket | null = null;
@@ -48,9 +61,15 @@ export class BaileysSocketService implements IBaileysSocketService {
   private connectionEstablishedCallbacks: Array<(sessionId: string, deviceInfo: any) => void> = [];
   private connectionFailedCallbacks: Array<(sessionId: string, error: string) => void> = [];
   private groupJoinCallbacks: Array<(groupData: BaileysGroupData) => void> = [];
-  private participantJoinCallbacks: Array<(groupId: string, participantId: string) => void> = [];
-  private participantLeaveCallbacks: Array<(groupId: string, participantIds: string[]) => void> = [];
-  private groupUpdateCallbacks: Array<(groupId: string, action: 'promote' | 'demote', participantIds: string[]) => void> = [];
+  private participantJoinCallbacks: Array<
+    (groupId: string, participantId: string, context?: ParticipantJoinContext) => void
+  > = [];
+  private participantLeaveCallbacks: Array<
+    (groupId: string, participants: BaileysParticipantRef[]) => void
+  > = [];
+  private groupUpdateCallbacks: Array<
+    (groupId: string, action: 'promote' | 'demote', participants: BaileysParticipantRef[]) => void
+  > = [];
 
   private readonly sessionPath: string;
 
@@ -347,6 +366,18 @@ export class BaileysSocketService implements IBaileysSocketService {
     }
   }
 
+  async getProfilePictureUrl(jid: string): Promise<string | null> {
+    if (!this.socket) {
+      return null;
+    }
+    try {
+      const url = await this.socket.profilePictureUrl(jid, 'image');
+      return url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async sendMessage(options: SendMessageOptions): Promise<boolean> {
     if (!this.socket) {
       throw new Error('WhatsApp not connected');
@@ -399,15 +430,23 @@ export class BaileysSocketService implements IBaileysSocketService {
     this.groupJoinCallbacks.push(callback);
   }
 
-  onParticipantJoin(callback: (groupId: string, participantId: string) => void): void {
+  onParticipantJoin(
+    callback: (groupId: string, participantId: string, context?: ParticipantJoinContext) => void
+  ): void {
     this.participantJoinCallbacks.push(callback);
   }
 
-  onParticipantLeave(callback: (groupId: string, participantIds: string[]) => void): void {
+  onParticipantLeave(callback: (groupId: string, participants: BaileysParticipantRef[]) => void): void {
     this.participantLeaveCallbacks.push(callback);
   }
 
-  onGroupUpdate(callback: (groupId: string, action: 'promote' | 'demote', participantIds: string[]) => void): void {
+  onGroupUpdate(
+    callback: (
+      groupId: string,
+      action: 'promote' | 'demote',
+      participants: BaileysParticipantRef[]
+    ) => void
+  ): void {
     this.groupUpdateCallbacks.push(callback);
   }
 
@@ -563,196 +602,230 @@ export class BaileysSocketService implements IBaileysSocketService {
     });
   }
 
+  /** Dump completo no terminal (`depth: null`) para payloads Baileys sem tipagem útil. */
+  private baileysConsole(originTag: string, data: unknown): void {
+    console.log(`\n========== ${originTag} ==========`);
+    console.log(
+      util.inspect(data, {
+        depth: null,
+        colors: false,
+        maxArrayLength: null,
+        maxStringLength: null,
+        breakLength: 120
+      })
+    );
+    console.log(`========== fim ${originTag} ==========\n`);
+  }
+
+  private dispatchGroupJoin(groupData: BaileysGroupData): void {
+    this.baileysConsole(
+      'CALLBACK registado (onGroupJoin) ← socket.ev "groups.upsert"',
+      groupData
+    );
+    this.groupJoinCallbacks.forEach(callback => callback(groupData));
+  }
+
+  private dispatchParticipantJoin(
+    groupId: string,
+    participantId: string,
+    trigger: string,
+    context?: ParticipantJoinContext
+  ): void {
+    this.baileysConsole(`CALLBACK registado (onParticipantJoin) ← ${trigger}`, {
+      trigger,
+      groupId,
+      participantId,
+      context
+    });
+    this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId, context));
+  }
+
+  private dispatchParticipantLeave(groupId: string, participants: BaileysParticipantRef[]): void {
+    this.baileysConsole(
+      'CALLBACK registado (onParticipantLeave) ← socket.ev "group-participants.update" remove',
+      { groupId, participants }
+    );
+    this.participantLeaveCallbacks.forEach(callback => callback(groupId, participants));
+  }
+
+  private dispatchGroupRoleUpdate(
+    groupId: string,
+    action: 'promote' | 'demote',
+    participants: BaileysParticipantRef[]
+  ): void {
+    this.baileysConsole(
+      `CALLBACK registado (onGroupUpdate) ← socket.ev "group-participants.update" ${action}`,
+      { groupId, action, participants }
+    );
+    this.groupUpdateCallbacks.forEach(callback => callback(groupId, action, participants));
+  }
+
+  private async logParticipantAddedDebug(groupId: string, participantId: string): Promise<void> {
+    let meta: GroupMetadata | undefined;
+    try {
+      meta = await this.socket!.groupMetadata(groupId);
+      this.baileysConsole(
+        `EXTRA após "group-participants.update" add → groupMetadata("${groupId}")`,
+        meta
+      );
+    } catch (error) {
+      this.baileysConsole('EXTRA groupMetadata falhou', { groupId, error });
+    }
+
+    const queryJid =
+      meta != null
+        ? this.resolveQueryJidForParticipant(participantId, meta)
+        : participantId.endsWith('@s.whatsapp.net')
+          ? participantId
+          : null;
+
+    if (!queryJid) {
+      this.baileysConsole(
+        'EXTRA não foi possível resolver JID PN para onWhatsApp/profile/status',
+        { participantId }
+      );
+      return;
+    }
+
+    try {
+      const onWhatsAppData = await this.socket!.onWhatsApp(queryJid);
+      this.baileysConsole(`EXTRA onWhatsApp("${queryJid}")`, onWhatsAppData);
+    } catch (error) {
+      this.baileysConsole('EXTRA onWhatsApp falhou', { queryJid, error });
+    }
+
+    try {
+      const profilePicUrl = await this.socket!.profilePictureUrl(queryJid, 'image');
+      this.baileysConsole(`EXTRA profilePictureUrl("${queryJid}")`, profilePicUrl);
+    } catch (error) {
+      this.baileysConsole('EXTRA profilePictureUrl (sem foto ou erro)', { queryJid, error });
+    }
+
+    try {
+      const status = await this.socket!.fetchStatus(queryJid);
+      this.baileysConsole(`EXTRA fetchStatus("${queryJid}")`, status);
+    } catch (error) {
+      this.baileysConsole('EXTRA fetchStatus falhou', { queryJid, error });
+    }
+
+    try {
+      const updatedGroupMeta = meta ?? (await this.socket!.groupMetadata(groupId));
+      const participantInGroup = updatedGroupMeta.participants.find(p => p.id === participantId);
+      this.baileysConsole('EXTRA participante no grupo (lista após add)', participantInGroup ?? {
+        participantId,
+        note: 'não encontrado em participants'
+      });
+    } catch (error) {
+      this.baileysConsole('EXTRA leitura participante no grupo falhou', { participantId, error });
+    }
+  }
+
+  /** JID PN para APIs Baileys que não aceitam `@lid`. */
+  private resolveQueryJidForParticipant(participantId: string, meta: GroupMetadata): string | null {
+    const row = meta.participants.find(p => p.id === participantId);
+    const pn = row?.phoneNumber;
+    if (pn?.endsWith('@s.whatsapp.net')) {
+      return pn;
+    }
+    if (participantId.endsWith('@s.whatsapp.net')) {
+      return participantId;
+    }
+    return null;
+  }
+
   private setupEventListeners(saveCreds: () => Promise<void>): void {
     if (!this.socket) return;
 
-    // Credentials update
     this.socket.ev.on('creds.update', saveCreds);
 
-    // Group events
     this.socket.ev.on('groups.upsert', (groups) => {
+      this.baileysConsole('SOCKET socket.ev "groups.upsert" (payload bruto)', groups);
       groups.forEach(group => {
         const groupData = this.convertGroupMetadata(group);
-        this.groupJoinCallbacks.forEach(callback => callback(groupData));
+        this.baileysConsole('SERVIÇO convertGroupMetadata → BaileysGroupData (um item)', groupData);
+        this.dispatchGroupJoin(groupData);
       });
     });
 
-    // Group participant updates
     this.socket.ev.on('group-participants.update', async (update) => {
-      // ========================================
-      // LOG COMPLETO DO EVENTO DE PARTICIPANTES
-      // ========================================
-      console.log('\n\n========== GROUP PARTICIPANTS UPDATE EVENT ==========');
-      console.log('OBJETO COMPLETO DO EVENTO:');
-      console.log(JSON.stringify(update, null, 2));
-      console.log('====================================================\n');
+      this.baileysConsole('SOCKET socket.ev "group-participants.update" (payload bruto)', update);
 
       const { id: groupId, participants, action } = update;
-      const participantIds = participants.map((p: any) => typeof p === 'string' ? p : p.id);
+
+      const toRefs = (): BaileysParticipantRef[] =>
+        participants.map((p: { id?: string; phoneNumber?: string } | string) =>
+          typeof p === 'string' ? { id: p } : { id: p.id as string, phoneNumber: p.phoneNumber }
+        );
 
       switch (action) {
         case 'add':
-          console.log('\n🟢 EVENTO: PARTICIPANTE(S) ADICIONADO(S) AO GRUPO');
-          console.log('Group ID:', groupId);
-          console.log('Participants IDs:', participantIds);
-
-          // Buscar dados completos do grupo
-          try {
-            console.log('\n--- Buscando metadados completos do grupo ---');
-            const groupMetadata = await this.socket!.groupMetadata(groupId);
-            console.log('METADADOS COMPLETOS DO GRUPO:');
-            console.log(JSON.stringify(groupMetadata, null, 2));
-          } catch (error) {
-            console.error('Erro ao buscar metadados do grupo:', error);
+          for (const raw of participants) {
+            const p = typeof raw === 'string' ? { id: raw } : raw;
+            const participantId = (p as { id: string }).id;
+            const pn = (p as { phoneNumber?: string }).phoneNumber;
+            const adm = (p as { admin?: string | null }).admin;
+            const membershipAdmin = adm === 'admin' || adm === 'superadmin';
+            await this.logParticipantAddedDebug(groupId, participantId);
+            this.dispatchParticipantJoin(
+              groupId,
+              participantId,
+              'socket.ev "group-participants.update" action add',
+              {
+                source: 'group-participants-update-add',
+                participantPnJid: pn?.endsWith('@s.whatsapp.net') ? pn : undefined,
+                membershipAdmin
+              }
+            );
           }
-
-          // Para cada participante que entrou, buscar dados individuais
-          for (const participantId of participantIds) {
-            console.log(`\n--- Dados do participante: ${participantId} ---`);
-
-            try {
-              // Verificar se o número está no WhatsApp e obter informações
-              console.log('Tentando buscar dados com onWhatsApp()...');
-              const onWhatsAppData = await this.socket!.onWhatsApp(participantId);
-              console.log('RESULTADO onWhatsApp():');
-              console.log(JSON.stringify(onWhatsAppData, null, 2));
-            } catch (error) {
-              console.error('Erro ao buscar onWhatsApp:', error);
-            }
-
-            try {
-              // Buscar foto de perfil do participante
-              console.log('Tentando buscar foto de perfil...');
-              const profilePicUrl = await this.socket!.profilePictureUrl(participantId, 'image');
-              console.log('URL DA FOTO DE PERFIL:', profilePicUrl);
-            } catch (error) {
-              console.error('Erro ao buscar foto de perfil (pode não ter):', error);
-            }
-
-            try {
-              // Buscar status do participante
-              console.log('Tentando buscar status...');
-              const status = await this.socket!.fetchStatus(participantId);
-              console.log('STATUS DO PARTICIPANTE:');
-              console.log(JSON.stringify(status, null, 2));
-            } catch (error) {
-              console.error('Erro ao buscar status:', error);
-            }
-
-            // Buscar informações do participante no grupo
-            try {
-              console.log('Buscando informações atualizadas do grupo para ver dados do participante...');
-              const updatedGroupMeta = await this.socket!.groupMetadata(groupId);
-              const participantInGroup = updatedGroupMeta.participants.find(p => p.id === participantId);
-              console.log('DADOS DO PARTICIPANTE NO GRUPO:');
-              console.log(JSON.stringify(participantInGroup, null, 2));
-            } catch (error) {
-              console.error('Erro ao buscar dados do participante no grupo:', error);
-            }
-
-            console.log(`--- Fim dos dados de ${participantId} ---\n`);
-          }
-
-          // Chamar callbacks originais
-          participantIds.forEach(participantId => {
-            this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId));
-          });
           break;
 
         case 'remove':
-          console.log('\n🔴 EVENTO: PARTICIPANTE(S) REMOVIDO(S) DO GRUPO');
-          console.log('Group ID:', groupId);
-          console.log('Participants IDs:', participantIds);
-
-          this.participantLeaveCallbacks.forEach(callback => callback(groupId, participantIds));
+          this.dispatchParticipantLeave(groupId, toRefs());
           break;
 
         case 'promote':
         case 'demote':
-          console.log(`\n⚪ EVENTO: PARTICIPANTE(S) ${action.toUpperCase()}`);
-          console.log('Group ID:', groupId);
-          console.log('Participants IDs:', participantIds);
-
-          this.groupUpdateCallbacks.forEach(callback => callback(groupId, action, participantIds));
+          this.dispatchGroupRoleUpdate(groupId, action, toRefs());
           break;
       }
-
-      console.log('\n========== FIM DO EVENTO ==========\n\n');
     });
 
-    // Messages (for participant join/leave detection via message stubs)
     this.socket.ev.on('messages.upsert', async (messageUpdate) => {
-      console.log('\n\n========== MESSAGES UPSERT EVENT ==========');
-      console.log('OBJETO COMPLETO DO MESSAGE UPDATE:');
-      console.log(JSON.stringify(messageUpdate, null, 2));
-      console.log('==========================================\n');
+      this.baileysConsole('SOCKET socket.ev "messages.upsert" (payload bruto completo)', messageUpdate);
 
       for (const message of messageUpdate.messages) {
-        // Handle message stub types for participant events
-        console.log('\nVerificando message stub type:', message.messageStubType);
+        if (message.messageStubType != null) {
+          const label =
+            MESSAGE_STUB_LABEL_PT[message.messageStubType] ?? `tipo ${message.messageStubType}`;
+          this.baileysConsole(
+            `SOCKET messages.upsert → item stub ${message.messageStubType} (${label}), objeto mensagem completo`,
+            message
+          );
+        }
 
-        if (message.messageStubType === 27) { // Participant joined
-          console.log('\n🟢 MESSAGE STUB: PARTICIPANTE ENTROU (tipo 27)');
-          console.log('MENSAGEM COMPLETA:');
-          console.log(JSON.stringify(message, null, 2));
-
+        if (message.messageStubType === 27) {
           const groupId = message.key.remoteJid!;
           const participantId = message.participant!;
 
-          console.log('Group ID:', groupId);
-          console.log('Participant ID:', participantId);
-
-          // Buscar dados do participante via message stub
           try {
-            console.log('\n--- Buscando dados do participante que entrou ---');
-
-            // messageStubParameters pode conter informações adicionais
-            if (message.messageStubParameters) {
-              console.log('MESSAGE STUB PARAMETERS:');
-              console.log(JSON.stringify(message.messageStubParameters, null, 2));
-            }
-
-            // Buscar metadados do grupo
             const groupMetadata = await this.socket!.groupMetadata(groupId);
             const participantInGroup = groupMetadata.participants.find(p => p.id === participantId);
-            console.log('PARTICIPANTE NO GRUPO:');
-            console.log(JSON.stringify(participantInGroup, null, 2));
-
-            // Tentar buscar informações adicionais
-            try {
-              const onWhatsAppData = await this.socket!.onWhatsApp(participantId);
-              console.log('DADOS onWhatsApp:');
-              console.log(JSON.stringify(onWhatsAppData, null, 2));
-            } catch (error) {
-              console.error('Erro ao buscar onWhatsApp:', error);
-            }
-
+            this.baileysConsole('EXTRA stub 27 → groupMetadata + linha do participante', {
+              groupMetadata,
+              participantInGroup
+            });
           } catch (error) {
-            console.error('Erro ao buscar dados do participante:', error);
+            this.baileysConsole('EXTRA stub 27 groupMetadata falhou', { groupId, error });
           }
 
-          this.participantJoinCallbacks.forEach(callback => callback(groupId, participantId));
-        }
-
-        // Logar outros tipos de message stubs relacionados a grupos
-        if (message.messageStubType) {
-          const stubTypes: Record<number, string> = {
-            27: 'Participante entrou',
-            28: 'Participante saiu',
-            29: 'Participante removido',
-            30: 'Participante promovido a admin',
-            31: 'Participante removido de admin',
-            32: 'Grupo criado',
-            // Adicione mais conforme necessário
-          };
-
-          if (stubTypes[message.messageStubType]) {
-            console.log(`\nMESSAGE STUB DETECTADO: ${stubTypes[message.messageStubType]} (tipo ${message.messageStubType})`);
-          }
+          this.dispatchParticipantJoin(
+            groupId,
+            participantId,
+            'socket.ev "messages.upsert" messageStubType 27 (participante entrou)',
+            { source: 'messages-upsert-stub-27' }
+          );
         }
       }
-
-      console.log('\n========== FIM DO MESSAGES EVENT ==========\n\n');
     });
   }
 
@@ -764,8 +837,8 @@ export class BaileysSocketService implements IBaileysSocketService {
       participants: group.participants.map(p => ({
         id: p.id,
         admin: p.admin,
-        phoneNumber: p.id.split('@')[0],
-        lid: (p as any).lid
+        phoneNumber: (p as { phoneNumber?: string }).phoneNumber,
+        lid: (p as { lid?: string }).lid
       })),
       creation: group.creation,
       owner: group.owner || '',

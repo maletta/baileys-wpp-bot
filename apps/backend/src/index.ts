@@ -12,9 +12,18 @@ import { PrismaClient } from '@prisma/client';
 import { BaileysSocketService } from '@/infrastructure/services/BaileysSocketService';
 import { UserRepository } from '@/infrastructure/repositories/UserRepository';
 import { QrCodeTryRepository } from '@/infrastructure/repositories/QrCodeTryRepository';
+import { GroupWppRepository } from '@/infrastructure/repositories/GroupWppRepository';
+import { ParticipantWppRepository } from '@/infrastructure/repositories/ParticipantWppRepository';
+import { ParticipantGroupWppRepository } from '@/infrastructure/repositories/ParticipantGroupWppRepository';
 
 // Import application
 import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase';
+import { UpsertGroupFromBaileysUseCase } from '@/application/use-cases/UpsertGroupFromBaileysUseCase';
+import { EnsureParticipantAndMembershipOnJoinUseCase } from '@/application/use-cases/EnsureParticipantAndMembershipOnJoinUseCase';
+import {
+  MarkParticipantLeftInGroupUseCase,
+  SetParticipantAdminInGroupUseCase
+} from '@/application/use-cases/WppParticipantGroupAdminUseCases';
 
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
@@ -25,6 +34,7 @@ import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
+import util from 'util';
 
 class App {
   private express: express.Application;
@@ -36,10 +46,17 @@ class App {
   private baileysService!: BaileysSocketService;
   private userRepository!: UserRepository;
   private qrCodeTryRepository!: QrCodeTryRepository;
+  private groupWppRepository!: GroupWppRepository;
+  private participantWppRepository!: ParticipantWppRepository;
+  private participantGroupWppRepository!: ParticipantGroupWppRepository;
   private authMiddleware!: AuthMiddleware;
 
   // Use Cases
   private createQrCodeUseCase!: CreateQrCodeUseCase;
+  private upsertGroupFromBaileysUseCase!: UpsertGroupFromBaileysUseCase;
+  private ensureParticipantAndMembershipOnJoinUseCase!: EnsureParticipantAndMembershipOnJoinUseCase;
+  private markParticipantLeftInGroupUseCase!: MarkParticipantLeftInGroupUseCase;
+  private setParticipantAdminInGroupUseCase!: SetParticipantAdminInGroupUseCase;
 
   // Controllers
   private sessionController!: SessionController;
@@ -73,6 +90,9 @@ class App {
     // Initialize repositories
     this.userRepository = new UserRepository(this.prisma);
     this.qrCodeTryRepository = new QrCodeTryRepository(this.prisma);
+    this.groupWppRepository = new GroupWppRepository(this.prisma);
+    this.participantWppRepository = new ParticipantWppRepository(this.prisma);
+    this.participantGroupWppRepository = new ParticipantGroupWppRepository(this.prisma);
 
     // Initialize middleware
     this.authMiddleware = new AuthMiddleware(
@@ -92,6 +112,28 @@ class App {
     this.createQrCodeUseCase = new CreateQrCodeUseCase(
       this.baileysService,
       this.userRepository
+    );
+
+    this.upsertGroupFromBaileysUseCase = new UpsertGroupFromBaileysUseCase(
+      this.groupWppRepository,
+      this.baileysService
+    );
+
+    this.ensureParticipantAndMembershipOnJoinUseCase =
+      new EnsureParticipantAndMembershipOnJoinUseCase(this.prisma, this.baileysService);
+
+    this.markParticipantLeftInGroupUseCase = new MarkParticipantLeftInGroupUseCase(
+      this.baileysService,
+      this.groupWppRepository,
+      this.participantWppRepository,
+      this.participantGroupWppRepository
+    );
+
+    this.setParticipantAdminInGroupUseCase = new SetParticipantAdminInGroupUseCase(
+      this.baileysService,
+      this.groupWppRepository,
+      this.participantWppRepository,
+      this.participantGroupWppRepository
     );
   }
 
@@ -169,6 +211,20 @@ class App {
     });
   }
 
+  private traceApp(handlerName: string, data: unknown): void {
+    console.log(`\n========== APP handler: ${handlerName} ==========`);
+    console.log(
+      util.inspect(data, {
+        depth: null,
+        colors: false,
+        maxArrayLength: null,
+        maxStringLength: null,
+        breakLength: 120
+      })
+    );
+    console.log(`========== fim APP ${handlerName} ==========\n`);
+  }
+
   private initializeSocketIO(): void {
     // Socket.IO is now handled by SessionSocketController
     // The controller is initialized in initializeControllers()
@@ -182,25 +238,39 @@ class App {
       this.io.emit('connection-update', state);
     });
 
-    // Group events
+    // Group events — sincronização Postgres (ver docs/assets/backend-wpp-baileys-sync-spec.md)
     this.baileysService.onGroupJoin((groupData) => {
-      logger.info('Bot joined group', { groupId: groupData.id, groupName: groupData.subject });
-      // Handle group join logic here
+      this.traceApp('onGroupJoin (via BaileysSocketService.register onGroupJoin)', groupData);
+      void this.upsertGroupFromBaileysUseCase.execute(groupData);
     });
 
-    this.baileysService.onParticipantJoin((groupId, participantId) => {
-      logger.info('Participant joined group', { groupId, participantId });
-      // Handle participant join logic here
+    this.baileysService.onParticipantJoin((groupId, participantId, context) => {
+      this.traceApp('onParticipantJoin', {
+        groupId,
+        participantId,
+        context
+      });
+      void this.ensureParticipantAndMembershipOnJoinUseCase.execute({
+        groupRegistry: groupId,
+        eventParticipantId: participantId,
+        participantPnJid: context?.participantPnJid,
+        membershipAdmin: context?.membershipAdmin,
+        context
+      });
     });
 
-    this.baileysService.onParticipantLeave((groupId, participantIds) => {
-      logger.info('Participants left group', { groupId, participantIds });
-      // Handle participant leave logic here
+    this.baileysService.onParticipantLeave((groupId, participants) => {
+      this.traceApp('onParticipantLeave', { groupId, participants });
+      void this.markParticipantLeftInGroupUseCase.execute(groupId, participants);
     });
 
-    this.baileysService.onGroupUpdate((groupId, action, participantIds) => {
-      logger.info('Group participants updated', { groupId, action, participantIds });
-      // Handle group update logic here
+    this.baileysService.onGroupUpdate((groupId, action, participants) => {
+      this.traceApp('onGroupUpdate', { groupId, action, participants });
+      void this.setParticipantAdminInGroupUseCase.execute(
+        groupId,
+        participants,
+        action === 'promote'
+      );
     });
   }
 

@@ -13,6 +13,7 @@ export interface IGroupWppRepository {
 export interface CreateGroupWppData {
   whatsappRegistry: string;
   name: string;
+  description?: string;
   linkedParent?: string;
   imageUrl?: string;
   notifyNewUserDetail?: boolean;
@@ -21,6 +22,7 @@ export interface CreateGroupWppData {
 
 export interface UpdateGroupWppData {
   name?: string;
+  description?: string;
   linkedParent?: string;
   imageUrl?: string;
   notifyNewUserDetail?: boolean;

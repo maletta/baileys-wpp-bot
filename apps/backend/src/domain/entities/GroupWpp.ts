@@ -3,6 +3,7 @@ export class GroupWpp {
     public readonly id: string,
     public readonly whatsappRegistry: string,
     public readonly name: string,
+    public readonly description: string | null,
     public readonly linkedParent: string | null,
     public readonly imageUrl: string | null,
     public readonly notifyNewUserDetail: boolean,

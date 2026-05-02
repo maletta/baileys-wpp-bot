@@ -21,7 +21,8 @@ import {
   BaileysParticipantData,
   SendMessageOptions,
   BaileysParticipantRef,
-  ParticipantJoinContext
+  ParticipantJoinContext,
+  BaileysGroupsUpdatePayload
 } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
 import { getCachedBaileysVersion } from '@/shared/utils/baileysVersionCache';
@@ -69,6 +70,9 @@ export class BaileysSocketService implements IBaileysSocketService {
   > = [];
   private groupUpdateCallbacks: Array<
     (groupId: string, action: 'promote' | 'demote', participants: BaileysParticipantRef[]) => void
+  > = [];
+  private groupsUpdateCallbacks: Array<
+    (updates: BaileysGroupsUpdatePayload) => void | Promise<void>
   > = [];
 
   private readonly sessionPath: string;
@@ -450,6 +454,12 @@ export class BaileysSocketService implements IBaileysSocketService {
     this.groupUpdateCallbacks.push(callback);
   }
 
+  onGroupsUpdate(
+    callback: (updates: BaileysGroupsUpdatePayload) => void | Promise<void>
+  ): void {
+    this.groupsUpdateCallbacks.push(callback);
+  }
+
   private setupConnectionEventListener(sessionId: string): void {
     if (!this.socket) return;
 
@@ -745,6 +755,18 @@ export class BaileysSocketService implements IBaileysSocketService {
         this.baileysConsole('SERVIÇO convertGroupMetadata → BaileysGroupData (um item)', groupData);
         this.dispatchGroupJoin(groupData);
       });
+    });
+
+    /** Metadados parciais quando o grupo é alterado no servidor (ex.: assunto, descrição). Após log, dispara `onGroupsUpdate` para persistência. */
+    this.socket.ev.on('groups.update', async (updates) => {
+      this.baileysConsole(
+        'SOCKET socket.ev "groups.update" (Baileys: Partial<GroupMetadata>[])',
+        updates
+      );
+
+      for (const cb of this.groupsUpdateCallbacks) {
+        void Promise.resolve(cb(updates));
+      }
     });
 
     this.socket.ev.on('group-participants.update', async (update) => {

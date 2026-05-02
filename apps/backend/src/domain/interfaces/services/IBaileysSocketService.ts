@@ -1,3 +1,5 @@
+import type { GroupMetadata } from '@whiskeysockets/baileys';
+
 export interface ConnectionState {
   isConnected: boolean;
   deviceInfo?: {
@@ -41,6 +43,9 @@ export interface ParticipantJoinContext {
   /** Se o membro entra já como admin (superadmin conta como admin na BD). */
   membershipAdmin?: boolean;
 }
+
+/** Payload de `socket.ev('groups.update')` — array de metadados parciais. */
+export type BaileysGroupsUpdatePayload = Partial<GroupMetadata>[];
 
 export interface SendMessageOptions {
   groupId: string;
@@ -88,5 +93,12 @@ export interface IBaileysSocketService {
       action: 'promote' | 'demote',
       participants: BaileysParticipantRef[]
     ) => void
+  ): void;
+  /**
+   * Disparado após o processamento interno de `groups.update` (logs + profilePicture).
+   * Útil para persistir `desc` / foto em `groups_wpp`.
+   */
+  onGroupsUpdate(
+    callback: (updates: BaileysGroupsUpdatePayload) => void | Promise<void>
   ): void;
 }

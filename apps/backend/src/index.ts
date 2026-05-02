@@ -24,6 +24,7 @@ import {
   MarkParticipantLeftInGroupUseCase,
   SetParticipantAdminInGroupUseCase
 } from '@/application/use-cases/WppParticipantGroupAdminUseCases';
+import { PatchGroupFromGroupsUpdateUseCase } from '@/application/use-cases/PatchGroupFromGroupsUpdateUseCase';
 
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
@@ -57,6 +58,7 @@ class App {
   private ensureParticipantAndMembershipOnJoinUseCase!: EnsureParticipantAndMembershipOnJoinUseCase;
   private markParticipantLeftInGroupUseCase!: MarkParticipantLeftInGroupUseCase;
   private setParticipantAdminInGroupUseCase!: SetParticipantAdminInGroupUseCase;
+  private patchGroupFromGroupsUpdateUseCase!: PatchGroupFromGroupsUpdateUseCase;
 
   // Controllers
   private sessionController!: SessionController;
@@ -134,6 +136,11 @@ class App {
       this.groupWppRepository,
       this.participantWppRepository,
       this.participantGroupWppRepository
+    );
+
+    this.patchGroupFromGroupsUpdateUseCase = new PatchGroupFromGroupsUpdateUseCase(
+      this.groupWppRepository,
+      this.baileysService
     );
   }
 
@@ -271,6 +278,11 @@ class App {
         participants,
         action === 'promote'
       );
+    });
+
+    this.baileysService.onGroupsUpdate((updates) => {
+      this.traceApp('onGroupsUpdate', updates);
+      void this.patchGroupFromGroupsUpdateUseCase.execute(updates);
     });
   }
 

@@ -22,9 +22,9 @@ export interface CreateGroupWppData {
 
 export interface UpdateGroupWppData {
   name?: string;
-  description?: string;
+  description?: string | null;
   linkedParent?: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
   notifyNewUserDetail?: boolean;
   onlyRegisteredUserMode?: boolean;
 }

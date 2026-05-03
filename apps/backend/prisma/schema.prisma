@@ -64,6 +64,10 @@ model GroupsWpp {
   name                   String
   description            String?
   linkedParent           String?
+  /// Comunidade raiz (`GroupMetadata.isCommunity`).
+  isCommunity            Boolean  @default(false)
+  /// Grupo de anúncios da comunidade (`GroupMetadata.isCommunityAnnounce`).
+  isCommunityAnnounce    Boolean  @default(false)
   imageUrl               String?
   notifyNewUserDetail    Boolean  @default(true)
   onlyRegisteredUserMode Boolean  @default(true)

@@ -15,6 +15,10 @@ export interface BaileysGroupData {
   id: string;
   subject: string;
   linkedParent?: string;
+  /** Comunidade raiz (metadado WhatsApp `GroupMetadata.isCommunity`). */
+  isCommunity?: boolean;
+  /** Grupo de anúncios ligado a uma comunidade (`GroupMetadata.isCommunityAnnounce`). */
+  isCommunityAnnounce?: boolean;
   participants: BaileysParticipantData[];
   creation?: number;
   owner?: string;
@@ -35,13 +39,14 @@ export interface BaileysParticipantRef {
   phoneNumber?: string;
 }
 
-/** Origem do callback `onParticipantJoin` — persistir só em `group-participants-update-add`. */
+/** Contexto do callback `onParticipantJoin` (sempre `group-participants.update`, action `add`). */
 export interface ParticipantJoinContext {
-  source: 'group-participants-update-add' | 'messages-upsert-stub-27';
   /** JID `...@s.whatsapp.net` quando presente no payload. */
   participantPnJid?: string;
   /** Se o membro entra já como admin (superadmin conta como admin na BD). */
   membershipAdmin?: boolean;
+  /** Quem entrou é o utilizador desta sessão (instância Baileys atual). */
+  sessionUserJoin?: boolean;
 }
 
 /** Payload de `socket.ev('groups.update')` — array de metadados parciais. */
@@ -71,6 +76,10 @@ export interface IBaileysSocketService {
   getAllGroups(): Promise<BaileysGroupData[]>;
   /** URL da foto do grupo ou contacto; devolve null se indisponível. */
   getProfilePictureUrl(jid: string): Promise<string | null>;
+  /**
+   * Indica se o identificador corresponde ao utilizador desta sessão (compara PN/LID em `creds.me`).
+   */
+  isSessionUserParticipant(participantId: string, participantPnJid?: string): boolean;
   sendMessage(options: SendMessageOptions): Promise<boolean>;
 
   // Event Listeners

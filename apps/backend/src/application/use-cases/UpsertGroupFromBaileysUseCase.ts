@@ -18,6 +18,8 @@ export class UpsertGroupFromBaileysUseCase {
         imageUrl = null;
       }
 
+      const isCommunity = groupData.isCommunity ?? false;
+      const isCommunityAnnounce = groupData.isCommunityAnnounce ?? false;
       const existing = await this.groupRepo.findByWhatsappRegistry(groupData.id);
 
       if (existing) {
@@ -25,6 +27,8 @@ export class UpsertGroupFromBaileysUseCase {
           name: groupData.subject,
           description: groupData.desc ?? undefined,
           linkedParent: groupData.linkedParent ?? undefined,
+          isCommunity,
+          isCommunityAnnounce,
           ...(imageUrl !== null ? { imageUrl } : {})
         });
       } else {
@@ -33,8 +37,23 @@ export class UpsertGroupFromBaileysUseCase {
           name: groupData.subject,
           description: groupData.desc,
           linkedParent: groupData.linkedParent,
+          isCommunity,
+          isCommunityAnnounce,
           imageUrl: imageUrl ?? undefined
         });
+      }
+
+      if (groupData.linkedParent && groupData.linkedParent !== groupData.id) {
+        const parentJid = groupData.linkedParent;
+        try {
+          const parentMeta = await this.baileys.getGroupData(parentJid);
+          await this.execute(parentMeta);
+        } catch (error) {
+          logger.warn('UpsertGroupFromBaileys: metadados do linkedParent indisponíveis', {
+            linkedParent: parentJid,
+            error
+          });
+        }
       }
     } catch (error) {
       logger.error('UpsertGroupFromBaileysUseCase falhou', { error, groupId: groupData.id });

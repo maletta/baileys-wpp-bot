@@ -5,6 +5,8 @@ export class GroupWpp {
     public readonly name: string,
     public readonly description: string | null,
     public readonly linkedParent: string | null,
+    public readonly isCommunity: boolean,
+    public readonly isCommunityAnnounce: boolean,
     public readonly imageUrl: string | null,
     public readonly notifyNewUserDetail: boolean,
     public readonly onlyRegisteredUserMode: boolean,

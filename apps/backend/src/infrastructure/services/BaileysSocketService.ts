@@ -5,7 +5,8 @@ import makeWASocket, {
   DisconnectReason,
   GroupMetadata,
   proto,
-  makeCacheableSignalKeyStore
+  makeCacheableSignalKeyStore,
+  areJidsSameUser
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -26,6 +27,7 @@ import {
 } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
 import { getCachedBaileysVersion } from '@/shared/utils/baileysVersionCache';
+import { toPnJidIfPossible } from '@/shared/utils/whatsappJid';
 import util from 'util';
 
 // Logger do Pino para Baileys (mais silencioso)
@@ -380,6 +382,32 @@ export class BaileysSocketService implements IBaileysSocketService {
     } catch {
       return null;
     }
+  }
+
+  isSessionUserParticipant(participantId: string, participantPnJid?: string): boolean {
+    if (!this.socket) {
+      return false;
+    }
+    const me = this.socket.authState.creds.me;
+    if (!me) {
+      return false;
+    }
+
+    const pnNorm = toPnJidIfPossible(participantPnJid);
+    const candidates = [participantId, pnNorm].filter((x): x is string => Boolean(x));
+
+    const meRefs = [me.id, me.lid, me.phoneNumber, toPnJidIfPossible(me.phoneNumber)].filter(
+      (x): x is string => Boolean(x)
+    );
+
+    for (const c of candidates) {
+      for (const m of meRefs) {
+        if (areJidsSameUser(c, m)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   async sendMessage(options: SendMessageOptions): Promise<boolean> {
@@ -784,18 +812,21 @@ export class BaileysSocketService implements IBaileysSocketService {
           for (const raw of participants) {
             const p = typeof raw === 'string' ? { id: raw } : raw;
             const participantId = (p as { id: string }).id;
-            const pn = (p as { phoneNumber?: string }).phoneNumber;
+            const pnRaw = (p as { phoneNumber?: string }).phoneNumber;
+            const pnJid =
+              pnRaw?.endsWith('@s.whatsapp.net') ? pnRaw : toPnJidIfPossible(pnRaw);
             const adm = (p as { admin?: string | null }).admin;
             const membershipAdmin = adm === 'admin' || adm === 'superadmin';
+            const sessionUserJoin = this.isSessionUserParticipant(participantId, pnJid);
             await this.logParticipantAddedDebug(groupId, participantId);
             this.dispatchParticipantJoin(
               groupId,
               participantId,
               'socket.ev "group-participants.update" action add',
               {
-                source: 'group-participants-update-add',
-                participantPnJid: pn?.endsWith('@s.whatsapp.net') ? pn : undefined,
-                membershipAdmin
+                participantPnJid: pnJid,
+                membershipAdmin,
+                sessionUserJoin
               }
             );
           }
@@ -812,7 +843,7 @@ export class BaileysSocketService implements IBaileysSocketService {
       }
     });
 
-    this.socket.ev.on('messages.upsert', async (messageUpdate) => {
+    this.socket.ev.on('messages.upsert', (messageUpdate) => {
       this.baileysConsole('SOCKET socket.ev "messages.upsert" (payload bruto completo)', messageUpdate);
 
       for (const message of messageUpdate.messages) {
@@ -824,29 +855,6 @@ export class BaileysSocketService implements IBaileysSocketService {
             message
           );
         }
-
-        if (message.messageStubType === 27) {
-          const groupId = message.key.remoteJid!;
-          const participantId = message.participant!;
-
-          try {
-            const groupMetadata = await this.socket!.groupMetadata(groupId);
-            const participantInGroup = groupMetadata.participants.find(p => p.id === participantId);
-            this.baileysConsole('EXTRA stub 27 → groupMetadata + linha do participante', {
-              groupMetadata,
-              participantInGroup
-            });
-          } catch (error) {
-            this.baileysConsole('EXTRA stub 27 groupMetadata falhou', { groupId, error });
-          }
-
-          this.dispatchParticipantJoin(
-            groupId,
-            participantId,
-            'socket.ev "messages.upsert" messageStubType 27 (participante entrou)',
-            { source: 'messages-upsert-stub-27' }
-          );
-        }
       }
     });
   }
@@ -856,6 +864,8 @@ export class BaileysSocketService implements IBaileysSocketService {
       id: group.id,
       subject: group.subject,
       linkedParent: group.linkedParent,
+      isCommunity: group.isCommunity,
+      isCommunityAnnounce: group.isCommunityAnnounce,
       participants: group.participants.map(p => ({
         id: p.id,
         admin: p.admin,

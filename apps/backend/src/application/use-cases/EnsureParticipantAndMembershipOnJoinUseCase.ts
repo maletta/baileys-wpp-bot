@@ -15,10 +15,7 @@ export interface EnsureParticipantMembershipInput {
   context?: ParticipantJoinContext;
 }
 
-/**
- * Persiste participante + junção no `action: add`.
- * Ignora `messages-upsert-stub-27` (fonte única de persistência).
- */
+/** Persiste participante + junção no `group-participants.update` com `action: add`. */
 export class EnsureParticipantAndMembershipOnJoinUseCase {
   constructor(
     private readonly prisma: PrismaClient,
@@ -26,10 +23,6 @@ export class EnsureParticipantAndMembershipOnJoinUseCase {
   ) {}
 
   async execute(input: EnsureParticipantMembershipInput): Promise<void> {
-    if (input.context?.source !== 'group-participants-update-add') {
-      return;
-    }
-
     let pnJid = input.participantPnJid;
     if (!pnJid?.endsWith('@s.whatsapp.net')) {
       try {
@@ -80,12 +73,16 @@ export class EnsureParticipantAndMembershipOnJoinUseCase {
             name: groupMeta.subject,
             description: groupMeta.desc ?? null,
             linkedParent: groupMeta.linkedParent ?? null,
+            isCommunity: groupMeta.isCommunity ?? false,
+            isCommunityAnnounce: groupMeta.isCommunityAnnounce ?? false,
             imageUrl
           },
           update: {
             name: groupMeta.subject,
             description: groupMeta.desc ?? null,
             linkedParent: groupMeta.linkedParent ?? null,
+            isCommunity: groupMeta.isCommunity ?? false,
+            isCommunityAnnounce: groupMeta.isCommunityAnnounce ?? false,
             imageUrl
           }
         });

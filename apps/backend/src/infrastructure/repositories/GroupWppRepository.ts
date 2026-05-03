@@ -13,6 +13,8 @@ function mapRow(row: PrismaGroup): GroupWpp {
     row.name,
     row.description ?? null,
     row.linkedParent ?? null,
+    row.isCommunity,
+    row.isCommunityAnnounce,
     row.imageUrl ?? null,
     row.notifyNewUserDetail,
     row.onlyRegisteredUserMode,
@@ -48,6 +50,8 @@ export class GroupWppRepository implements IGroupWppRepository {
         name: groupData.name,
         description: groupData.description ?? null,
         linkedParent: groupData.linkedParent ?? null,
+        isCommunity: groupData.isCommunity ?? false,
+        isCommunityAnnounce: groupData.isCommunityAnnounce ?? false,
         imageUrl: groupData.imageUrl ?? null,
         notifyNewUserDetail: groupData.notifyNewUserDetail ?? true,
         onlyRegisteredUserMode: groupData.onlyRegisteredUserMode ?? true
@@ -63,6 +67,10 @@ export class GroupWppRepository implements IGroupWppRepository {
         ...(groupData.name !== undefined && { name: groupData.name }),
         ...(groupData.description !== undefined && { description: groupData.description }),
         ...(groupData.linkedParent !== undefined && { linkedParent: groupData.linkedParent }),
+        ...(groupData.isCommunity !== undefined && { isCommunity: groupData.isCommunity }),
+        ...(groupData.isCommunityAnnounce !== undefined && {
+          isCommunityAnnounce: groupData.isCommunityAnnounce
+        }),
         ...(groupData.imageUrl !== undefined && { imageUrl: groupData.imageUrl }),
         ...(groupData.notifyNewUserDetail !== undefined && {
           notifyNewUserDetail: groupData.notifyNewUserDetail

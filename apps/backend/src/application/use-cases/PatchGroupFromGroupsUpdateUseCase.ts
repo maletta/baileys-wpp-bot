@@ -40,6 +40,14 @@ export class PatchGroupFromGroupsUpdateUseCase {
           data.description = partial.desc ?? null;
         }
 
+        if ('isCommunity' in partial && typeof partial.isCommunity === 'boolean') {
+          data.isCommunity = partial.isCommunity;
+        }
+
+        if ('isCommunityAnnounce' in partial && typeof partial.isCommunityAnnounce === 'boolean') {
+          data.isCommunityAnnounce = partial.isCommunityAnnounce;
+        }
+
         await this.groupRepo.update(existing.id, data);
       } catch (error) {
         logger.error('PatchGroupFromGroupsUpdate: falha por item', { error, gid });

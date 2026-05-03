@@ -25,6 +25,10 @@ import {
   SetParticipantAdminInGroupUseCase
 } from '@/application/use-cases/WppParticipantGroupAdminUseCases';
 import { PatchGroupFromGroupsUpdateUseCase } from '@/application/use-cases/PatchGroupFromGroupsUpdateUseCase';
+import { SyncGroupMembersAfterBotJoinUseCase } from '@/application/use-cases/SyncGroupMembersAfterBotJoinUseCase';
+
+// Import domain
+import type { BaileysGroupData } from '@/domain/interfaces/services/IBaileysSocketService';
 
 // Import presentation
 import { SessionController } from '@/presentation/controllers/SessionController';
@@ -35,6 +39,7 @@ import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
+import { toPnJidIfPossible } from '@/shared/utils/whatsappJid';
 import util from 'util';
 
 class App {
@@ -59,6 +64,7 @@ class App {
   private markParticipantLeftInGroupUseCase!: MarkParticipantLeftInGroupUseCase;
   private setParticipantAdminInGroupUseCase!: SetParticipantAdminInGroupUseCase;
   private patchGroupFromGroupsUpdateUseCase!: PatchGroupFromGroupsUpdateUseCase;
+  private syncGroupMembersAfterBotJoinUseCase!: SyncGroupMembersAfterBotJoinUseCase;
 
   // Controllers
   private sessionController!: SessionController;
@@ -142,6 +148,11 @@ class App {
       this.groupWppRepository,
       this.baileysService
     );
+
+    this.syncGroupMembersAfterBotJoinUseCase = new SyncGroupMembersAfterBotJoinUseCase(
+      this.prisma,
+      this.baileysService
+    );
   }
 
   private initializeControllers(): void {
@@ -218,6 +229,23 @@ class App {
     });
   }
 
+  /**
+   * Em `groups.upsert` o Baileys envia os participantes; quando o bot entra no grupo,
+   * por vezes só este evento chega (sem `group-participants.update` add). Comparação
+   * alinhada com `BaileysSocketService` / `group-participants.update`.
+   */
+  private sessionUserIsAmongGroupUpsertParticipants(groupData: BaileysGroupData): boolean {
+    for (const p of groupData.participants) {
+      const pnRaw = p.phoneNumber;
+      const pnJid =
+        pnRaw?.endsWith('@s.whatsapp.net') ? pnRaw : toPnJidIfPossible(pnRaw);
+      if (this.baileysService.isSessionUserParticipant(p.id, pnJid)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private traceApp(handlerName: string, data: unknown): void {
     console.log(`\n========== APP handler: ${handlerName} ==========`);
     console.log(
@@ -249,6 +277,9 @@ class App {
     this.baileysService.onGroupJoin((groupData) => {
       this.traceApp('onGroupJoin (via BaileysSocketService.register onGroupJoin)', groupData);
       void this.upsertGroupFromBaileysUseCase.execute(groupData);
+      if (this.sessionUserIsAmongGroupUpsertParticipants(groupData)) {
+        void this.syncGroupMembersAfterBotJoinUseCase.execute(groupData.id);
+      }
     });
 
     this.baileysService.onParticipantJoin((groupId, participantId, context) => {
@@ -257,6 +288,15 @@ class App {
         participantId,
         context
       });
+      /**
+       * Entrada do próprio bot (`sessionUserJoin`): ignoramos este callback porque o upsert
+       * unitário (`EnsureParticipantAndMembershipOnJoinUseCase`) não se aplica aqui — o grupo
+       * e todos os membros são tratados em `onGroupJoin` via `SyncGroupMembersAfterBotJoinUseCase`.
+       * Para outros participantes, `onParticipantJoin` só persiste esse membro e garante o grupo.
+       */
+      if (context?.sessionUserJoin) {
+        return;
+      }
       void this.ensureParticipantAndMembershipOnJoinUseCase.execute({
         groupRegistry: groupId,
         eventParticipantId: participantId,

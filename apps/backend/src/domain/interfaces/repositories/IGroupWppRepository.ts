@@ -15,6 +15,8 @@ export interface CreateGroupWppData {
   name: string;
   description?: string;
   linkedParent?: string;
+  isCommunity?: boolean;
+  isCommunityAnnounce?: boolean;
   imageUrl?: string;
   notifyNewUserDetail?: boolean;
   onlyRegisteredUserMode?: boolean;
@@ -24,6 +26,8 @@ export interface UpdateGroupWppData {
   name?: string;
   description?: string | null;
   linkedParent?: string;
+  isCommunity?: boolean;
+  isCommunityAnnounce?: boolean;
   imageUrl?: string | null;
   notifyNewUserDetail?: boolean;
   onlyRegisteredUserMode?: boolean;

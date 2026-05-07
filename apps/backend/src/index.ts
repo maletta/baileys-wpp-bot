@@ -36,11 +36,15 @@ import { SessionSocketController } from '@/presentation/controllers/SessionSocke
 import { AuthMiddleware } from '@/presentation/middlewares/authMiddleware';
 import { createAuthRoutes } from '@/presentation/routes/authRoutes';
 import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
+import { createPublicParticipantAuthRoutes } from '@/presentation/routes/publicParticipantAuthRoutes';
+import { createParticipantPortalRoutes } from '@/presentation/routes/participantPortalRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
 import { toPnJidIfPossible } from '@/shared/utils/whatsappJid';
 import util from 'util';
+import fs from 'fs';
+import path from 'path';
 
 class App {
   private express: express.Application;
@@ -193,11 +197,33 @@ class App {
   }
 
   private initializeRoutes(): void {
+    const uploadRoot = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadRoot)) {
+      fs.mkdirSync(uploadRoot, { recursive: true });
+    }
+    this.express.use('/uploads', express.static(uploadRoot));
+
     // Health check routes
     this.express.use('/health', createHealthRoutes(this.prisma, this.baileysService));
 
     // Auth routes
     this.express.use('/api/auth', createAuthRoutes(this.prisma));
+
+    // Participante — OTP público (formulário sem Google)
+    this.express.use(
+      '/api/public/participant-auth',
+      createPublicParticipantAuthRoutes({
+        prisma: this.prisma,
+        participantRepo: this.participantWppRepository,
+        baileys: this.baileysService
+      })
+    );
+
+    // Portal participante (JWT Google ou JWT temporário OTP)
+    this.express.use(
+      '/api/participant-portal',
+      createParticipantPortalRoutes(this.prisma, this.baileysService)
+    );
 
     // Session routes
     this.express.post('/api/session/create-qr-code',

@@ -19,6 +19,16 @@ enum TokenType {
   PARTICIPANT_ON_GROUP_TOKEN
 }
 
+/// Tokens de autorização temporária vinculados apenas ao participante WhatsApp (sem conta Google / User).
+enum ParticipantTemporaryTokenType {
+  AUTHORIZE_PARTICIPANT
+}
+
+/// Finalidade do token (ex.: acesso ao formulário público).
+enum ParticipantAuthorizationContext {
+  PUBLIC_FORM
+}
+
 model User {
   id             String   @id @default(cuid())
   googleId       String   @unique
@@ -49,12 +59,14 @@ model ParticipantsWpp {
   updatedAt        DateTime @updatedAt
 
   // Relacionamentos
-  groupParticipations        ParticipantGroupWpp[]
-  userLinks                  ParticipantUserLink[]
-  registerTokens             ParticipantRegisterToken[]
-  forms                      ParticipantForm[]
-  anonymousMessagesMentioned AnonymousMessageParticipant[]
+  groupParticipations         ParticipantGroupWpp[]
+  userLinks                   ParticipantUserLink[]
+  registerTokens              ParticipantRegisterToken[]
+  forms                       ParticipantForm[]
+  temporaryAuthTokens         ParticipantTemporaryToken[]
+  anonymousMessagesMentioned  AnonymousMessageParticipant[]
 
+  @@index([cellphone])
   @@map("participants_wpp")
 }
 
@@ -132,19 +144,52 @@ model ParticipantRegisterToken {
   @@map("participant_register_tokens")
 }
 
+/// Autorização por OTP enviada no WhatsApp, sem exigir `User` vinculado.
+model ParticipantTemporaryToken {
+  id                 String                         @id @default(cuid())
+  idParticipantWpp   String
+  type               ParticipantTemporaryTokenType
+  context            ParticipantAuthorizationContext
+  /// Hash do código OTP (ex.: bcrypt); nunca armazenar o código em claro.
+  otpHash            String
+  consumedAt         DateTime?
+  /// Soft delete ao substituir token no reenvio ou revogação manual.
+  deletedAt          DateTime?
+  expiresAt          DateTime
+  /// Último envio via WhatsApp (anti-abuso / cooldown no reenvio).
+  lastSentAt         DateTime?
+  resendCount        Int                            @default(0)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+
+  participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id], onDelete: Cascade)
+
+  @@index([idParticipantWpp, type, context])
+  @@index([expiresAt])
+  @@map("participant_temporary_tokens")
+}
+
 model ParticipantForm {
-  id                String   @id @default(cuid())
-  idParticipantWpp  String
-  name              String
-  pronoun           String
-  relationship      String
-  birthday          DateTime
-  location          String
-  sexualOrientation String
-  instagram         String?
-  photoUrl          String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  idParticipantWpp       String     @unique
+  name                   String
+  pronoun                String
+  relationship           String
+  birthday               DateTime
+  location               String
+  sexualOrientation      String
+  /// Pergunta: «Qual seu rolê favorito?» (texto livre).
+  favoriteActivity       String     @default("")
+  instagram              String?
+  /// Legado: caminho relativo em disco (ex. participant-forms/...). Vazio quando a foto está só em `photo`.
+  photoUrl               String     @default("")
+  /// Bytes da imagem (multipart → DB). Preferência em relação a `photoUrl` vazio.
+  photo                  Bytes?
+  photoMimeType          String?    @db.VarChar(64)
+  /// Preferência persistida: enviar resumo do formulário ao grupo ao salvar.
+  sendFormMessageToGroup Boolean    @default(true)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
 
   // Relacionamentos
   participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id])

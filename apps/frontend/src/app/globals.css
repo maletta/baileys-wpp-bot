@@ -302,3 +302,21 @@
 .fade-in {
   animation: fadeIn 0.2s ease-out;
 }
+
+/* react-phone-number-input (ParticipantWhatsAppPhoneInput) — visual próximo ao Input shadcn */
+@layer components {
+  .phone-input-participant.PhoneInput {
+    @apply w-full min-h-9 rounded-md border border-input bg-transparent px-2 shadow-sm gap-1.5;
+    @apply focus-within:outline-none focus-within:ring-1 focus-within:ring-ring;
+    --PhoneInput-color--focus: hsl(var(--primary));
+  }
+
+  .phone-input-participant .PhoneInputInput {
+    @apply min-h-9 border-0 bg-transparent py-1 text-sm shadow-none tabular-nums;
+    @apply placeholder:text-muted-foreground focus:outline-none focus:ring-0;
+  }
+
+  .phone-input-participant .PhoneInputCountry {
+    @apply mr-0;
+  }
+}

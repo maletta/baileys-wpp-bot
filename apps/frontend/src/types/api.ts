@@ -105,6 +105,8 @@ export interface ParticipantForm {
   birthday: string;
   location: string;
   sexualOrientation: 'Bissexual' | 'Gay' | 'Hétero' | 'Lésbica' | 'Não-binário' | 'Pan';
+  /** «Qual seu rolê favorito?» */
+  favoriteActivity: string;
   instagram?: string;
   photoUrl: string;
   createdAt: string;
@@ -118,6 +120,7 @@ export interface CreateParticipantFormRequest {
   birthday: string;
   location: string;
   sexualOrientation: string;
+  favoriteActivity: string;
   instagram?: string;
   photo: File;
 }

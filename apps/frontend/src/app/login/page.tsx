@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 import { useAuth } from '@/hooks/useAuth';
@@ -187,6 +188,11 @@ export default function LoginPage() {
 
           {/* Help Link */}
           <p className="text-center text-sm text-muted-foreground">
+            Participante do grupo?{' '}
+            <Link href="/formulario" className="text-primary hover:underline font-medium">
+              Acesso ao formulário
+            </Link>
+            {' · '}
             Precisa de ajuda?{' '}
             <a href="#" className="text-primary hover:underline font-medium">
               Entre em contato

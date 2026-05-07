@@ -29,6 +29,13 @@ export class ParticipantWppRepository implements IParticipantWppRepository {
     return row ? mapRow(row) : null;
   }
 
+  async findByCellphoneDigits(cellphoneDigits: string): Promise<ParticipantWpp | null> {
+    const row = await this.prisma.participantsWpp.findFirst({
+      where: { cellphone: cellphoneDigits }
+    });
+    return row ? mapRow(row) : null;
+  }
+
   async create(data: CreateParticipantWppData): Promise<ParticipantWpp> {
     const row = await this.prisma.participantsWpp.create({
       data: {

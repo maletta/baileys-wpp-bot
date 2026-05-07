@@ -42,6 +42,14 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        /** Com FormData o browser deve definir multipart + boundary; senão o default JSON quebra uploads. */
+        if (config.data instanceof FormData) {
+          if (config.headers && typeof config.headers.delete === 'function') {
+            config.headers.delete('Content-Type');
+          } else {
+            delete (config.headers as Record<string, unknown>)['Content-Type'];
+          }
+        }
         return config;
       },
       (error) => Promise.reject(error)
@@ -191,6 +199,7 @@ class ApiClient {
     formData.append('birthday', data.birthday);
     formData.append('location', data.location);
     formData.append('sexualOrientation', data.sexualOrientation);
+    formData.append('favoriteActivity', data.favoriteActivity);
     if (data.instagram) formData.append('instagram', data.instagram);
     formData.append('photo', data.photo);
 

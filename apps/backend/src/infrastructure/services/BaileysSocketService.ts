@@ -21,6 +21,7 @@ import {
   BaileysGroupData,
   BaileysParticipantData,
   SendMessageOptions,
+  SendGroupFormMessageOptions,
   BaileysParticipantRef,
   ParticipantJoinContext,
   BaileysGroupsUpdatePayload
@@ -437,6 +438,42 @@ export class BaileysSocketService implements IBaileysSocketService {
       return true;
     } catch (error) {
       logger.error('Failed to send message', { error, options });
+      return false;
+    }
+  }
+
+  async sendPrivateText(jid: string, text: string): Promise<boolean> {
+    if (!this.socket) {
+      throw new Error('WhatsApp not connected');
+    }
+    try {
+      await this.socket.sendMessage(jid, { text });
+      logger.info('Private message sent', { jidPrefix: jid.split('@')[0]?.slice(-4) });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send private message', { error, jidPrefix: jid.split('@')[0]?.slice(-4) });
+      return false;
+    }
+  }
+
+  async sendGroupFormMessage(options: SendGroupFormMessageOptions): Promise<boolean> {
+    if (!this.socket) {
+      throw new Error('WhatsApp not connected');
+    }
+    try {
+      if (options.imageBuffer && options.imageBuffer.length > 0 && options.imageMimetype) {
+        await this.socket.sendMessage(options.groupJid, {
+          image: options.imageBuffer,
+          mimetype: options.imageMimetype,
+          caption: options.caption
+        });
+      } else {
+        await this.socket.sendMessage(options.groupJid, { text: options.caption });
+      }
+      logger.info('Group form message sent', { groupTail: options.groupJid.split('@')[0]?.slice(-6) });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send group form message', { error });
       return false;
     }
   }

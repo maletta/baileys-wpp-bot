@@ -22,13 +22,13 @@ export function ProtectedRoute({
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        router.push(redirectTo);
+        router.push(redirectTo as never);
         return;
       }
 
       // Verificar se o usuário tem o papel necessário
       if (requiredRole.length > 0 && user && !requiredRole.includes(user.role)) {
-        router.push('/unauthorized');
+        router.push('/unauthorized' as never);
         return;
       }
     }

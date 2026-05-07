@@ -58,6 +58,15 @@ export interface SendMessageOptions {
   mentions?: string[];
 }
 
+export interface SendGroupFormMessageOptions {
+  /** JID do grupo (ex.: `...@g.us`). */
+  groupJid: string;
+  caption: string;
+  imageBuffer?: Buffer;
+  /** Ex.: image/jpeg */
+  imageMimetype?: string;
+}
+
 export interface IBaileysSocketService {
   // Connection Management
   createConnection(sessionId: string): Promise<string>; // Returns QR code
@@ -81,6 +90,10 @@ export interface IBaileysSocketService {
    */
   isSessionUserParticipant(participantId: string, participantPnJid?: string): boolean;
   sendMessage(options: SendMessageOptions): Promise<boolean>;
+  /** Mensagem de texto para chat privado (JID PN ou `@lid`). */
+  sendPrivateText(jid: string, text: string): Promise<boolean>;
+  /** Resumo do formulário no grupo: legenda + imagem opcional. */
+  sendGroupFormMessage(options: SendGroupFormMessageOptions): Promise<boolean>;
 
   // Event Listeners
   onConnectionUpdate(callback: (state: ConnectionState) => void): void;

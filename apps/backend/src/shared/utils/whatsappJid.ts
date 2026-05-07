@@ -23,3 +23,23 @@ export function isPnJid(jid: string): boolean {
 export function isLidJid(jid: string): boolean {
   return jid.endsWith('@lid');
 }
+
+/**
+ * JID de chat privado para envio (PN preferencial, depois LID, depois dígitos do `cellphone`).
+ */
+export function resolveParticipantDmJid(participant: {
+  jid: string | null;
+  lid: string | null;
+  cellphone: string;
+}): string | null {
+  if (participant.jid?.endsWith('@s.whatsapp.net')) {
+    return participant.jid;
+  }
+  if (participant.lid?.endsWith('@lid')) {
+    return participant.lid;
+  }
+  if (participant.jid?.endsWith('@lid')) {
+    return participant.jid;
+  }
+  return toPnJidIfPossible(participant.cellphone) ?? null;
+}

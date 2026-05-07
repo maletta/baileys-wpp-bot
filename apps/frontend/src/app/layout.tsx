@@ -26,7 +26,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={inter.className}>
+      {/* suppressHydrationWarning: extensões do browser podem injetar atributos no body (ex.: ap-style) */}
+      <body className={inter.className} suppressHydrationWarning>
         <ChunkLoadRecovery />
         <AuthProvider>
           {children}

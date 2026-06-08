@@ -3,6 +3,8 @@ import path from 'path';
 import type { GroupsWpp, ParticipantGroupWpp, PrismaClient } from '@prisma/client';
 import { IParticipantFormRepository } from '@/domain/interfaces/repositories/IParticipantFormRepository';
 import type { IBaileysSocketService } from '@/domain/interfaces/services/IBaileysSocketService';
+import { IGroupWppRepository } from '@/domain/interfaces/repositories/IGroupWppRepository';
+import { ICommunityConfigRepository } from '@/domain/interfaces/repositories/ICommunityConfigRepository';
 import { logger } from '@/shared/utils/logger';
 import {
   assertParticipantAllowed,
@@ -13,7 +15,11 @@ import type { ParticipantPortalAuthState } from '@/presentation/middlewares/hybr
 
 export interface UpsertParticipantPortalFormInput {
   participantId?: string;
+  /** Slug do formulário (/formulario/SLUG) para auto-resolver o grupo de notificação. */
+  formSlug?: string;
+  /** Obsoleto quando formSlug é informado. Mantido para compatibilidade. */
   idGroupWpp?: string;
+  /** Obsoleto quando formSlug é informado (sempre true). */
   sendFormMessageToGroup: boolean;
   name: string;
   pronoun: string;
@@ -81,8 +87,10 @@ export class UpsertParticipantPortalFormUseCase {
     private readonly prisma: PrismaClient,
     private readonly forms: IParticipantFormRepository,
     private readonly baileys: IBaileysSocketService,
-    private readonly uploadsRoot: string
-  ) {}
+    private readonly uploadsRoot: string,
+    private readonly groupRepo: IGroupWppRepository,
+    private readonly communityConfigRepo: ICommunityConfigRepository
+  ) { }
 
   async execute(
     auth: ParticipantPortalAuthState,
@@ -99,13 +107,28 @@ export class UpsertParticipantPortalFormUseCase {
     }
     assertParticipantAllowed(auth, participantId);
 
-    if (input.sendFormMessageToGroup) {
-      if (!input.idGroupWpp?.trim()) {
-        throw new ParticipantPortalAuthError(
-          'idGroupWpp é obrigatório quando sendFormMessageToGroup está ativo.',
-          400
-        );
+    // --- Resolver grupo de notificação via formSlug ---
+    let resolvedGroupId: string | undefined = input.idGroupWpp?.trim() || undefined;
+
+    if (input.formSlug?.trim()) {
+      const groupBySlug = await this.groupRepo.findByFormSlug(input.formSlug.trim());
+      if (!groupBySlug) {
+        throw new ParticipantPortalAuthError('Slug inválido: grupo não encontrado.', 400);
       }
+
+      if (groupBySlug.isCommunity) {
+        const config = await this.communityConfigRepo.findByGroupWppId(groupBySlug.id);
+        resolvedGroupId = config?.notificationGroupId ?? groupBySlug.id;
+      } else {
+        resolvedGroupId = groupBySlug.id;
+      }
+    }
+
+    if (input.sendFormMessageToGroup && !resolvedGroupId) {
+      throw new ParticipantPortalAuthError(
+        'Informe um grupo ou slug válido para envio da mensagem.',
+        400
+      );
     }
 
     const existing = await this.forms.findByParticipantId(participantId);
@@ -129,11 +152,11 @@ export class UpsertParticipantPortalFormUseCase {
     type MembershipWithGroup = ParticipantGroupWpp & { group: GroupsWpp };
 
     let membershipForSend: MembershipWithGroup | null = null;
-    if (input.sendFormMessageToGroup && input.idGroupWpp) {
+    if (input.sendFormMessageToGroup && resolvedGroupId) {
       const membership = await this.prisma.participantGroupWpp.findUnique({
         where: {
           idGroupWpp_idParticipantWpp: {
-            idGroupWpp: input.idGroupWpp,
+            idGroupWpp: resolvedGroupId,
             idParticipantWpp: participantId
           }
         },
@@ -143,7 +166,7 @@ export class UpsertParticipantPortalFormUseCase {
       if (!membership || membership.deleted) {
         logger.warn('Participant portal form: envio ao grupo bloqueado — sem membership ativa', {
           participantTail: participantId.slice(-6),
-          groupTail: input.idGroupWpp.slice(-6)
+          groupTail: resolvedGroupId.slice(-6)
         });
         throw new ParticipantPortalAuthError(
           'Não é membro ativo do grupo selecionado ou o grupo é inválido.',
@@ -171,7 +194,7 @@ export class UpsertParticipantPortalFormUseCase {
     let messageSentToGroup = false;
     const warnings: string[] = [];
 
-    if (input.sendFormMessageToGroup && input.idGroupWpp && membershipForSend) {
+    if (input.sendFormMessageToGroup && resolvedGroupId && membershipForSend) {
       const caption = buildCaption({
         name: row.name,
         pronoun: row.pronoun,

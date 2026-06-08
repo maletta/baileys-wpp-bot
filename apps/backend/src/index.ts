@@ -15,6 +15,7 @@ import { QrCodeTryRepository } from '@/infrastructure/repositories/QrCodeTryRepo
 import { GroupWppRepository } from '@/infrastructure/repositories/GroupWppRepository';
 import { ParticipantWppRepository } from '@/infrastructure/repositories/ParticipantWppRepository';
 import { ParticipantGroupWppRepository } from '@/infrastructure/repositories/ParticipantGroupWppRepository';
+import { CommunityConfigRepository } from '@/infrastructure/repositories/CommunityConfigRepository';
 
 // Import application
 import { CreateQrCodeUseCase } from '@/application/use-cases/CreateQrCodeUseCase';
@@ -26,6 +27,7 @@ import {
 } from '@/application/use-cases/WppParticipantGroupAdminUseCases';
 import { PatchGroupFromGroupsUpdateUseCase } from '@/application/use-cases/PatchGroupFromGroupsUpdateUseCase';
 import { SyncGroupMembersAfterBotJoinUseCase } from '@/application/use-cases/SyncGroupMembersAfterBotJoinUseCase';
+import { SendNewMemberWelcomeUseCase } from '@/application/use-cases/SendNewMemberWelcomeUseCase';
 
 // Import domain
 import type { BaileysGroupData } from '@/domain/interfaces/services/IBaileysSocketService';
@@ -38,6 +40,8 @@ import { createAuthRoutes } from '@/presentation/routes/authRoutes';
 import { createHealthRoutes } from '@/presentation/routes/healthRoutes';
 import { createPublicParticipantAuthRoutes } from '@/presentation/routes/publicParticipantAuthRoutes';
 import { createParticipantPortalRoutes } from '@/presentation/routes/participantPortalRoutes';
+import { createFormSlugRoutes } from '@/presentation/routes/formSlugRoutes';
+import { createGroupManagementRoutes } from '@/presentation/routes/groupManagementRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
@@ -59,6 +63,7 @@ class App {
   private groupWppRepository!: GroupWppRepository;
   private participantWppRepository!: ParticipantWppRepository;
   private participantGroupWppRepository!: ParticipantGroupWppRepository;
+  private communityConfigRepository!: CommunityConfigRepository;
   private authMiddleware!: AuthMiddleware;
 
   // Use Cases
@@ -69,6 +74,7 @@ class App {
   private setParticipantAdminInGroupUseCase!: SetParticipantAdminInGroupUseCase;
   private patchGroupFromGroupsUpdateUseCase!: PatchGroupFromGroupsUpdateUseCase;
   private syncGroupMembersAfterBotJoinUseCase!: SyncGroupMembersAfterBotJoinUseCase;
+  private sendNewMemberWelcomeUseCase!: SendNewMemberWelcomeUseCase;
 
   // Controllers
   private sessionController!: SessionController;
@@ -105,6 +111,7 @@ class App {
     this.groupWppRepository = new GroupWppRepository(this.prisma);
     this.participantWppRepository = new ParticipantWppRepository(this.prisma);
     this.participantGroupWppRepository = new ParticipantGroupWppRepository(this.prisma);
+    this.communityConfigRepository = new CommunityConfigRepository(this.prisma);
 
     // Initialize middleware
     this.authMiddleware = new AuthMiddleware(
@@ -128,6 +135,7 @@ class App {
 
     this.upsertGroupFromBaileysUseCase = new UpsertGroupFromBaileysUseCase(
       this.groupWppRepository,
+      this.communityConfigRepository,
       this.baileysService
     );
 
@@ -155,6 +163,12 @@ class App {
 
     this.syncGroupMembersAfterBotJoinUseCase = new SyncGroupMembersAfterBotJoinUseCase(
       this.prisma,
+      this.baileysService
+    );
+
+    this.sendNewMemberWelcomeUseCase = new SendNewMemberWelcomeUseCase(
+      this.groupWppRepository,
+      this.communityConfigRepository,
       this.baileysService
     );
   }
@@ -219,11 +233,17 @@ class App {
       })
     );
 
+    // Form slug — validação de slug de grupo/comunidade
+    this.express.use('/api/public/form-slug', createFormSlugRoutes(this.prisma));
+
     // Portal participante (JWT Google ou JWT temporário OTP)
     this.express.use(
       '/api/participant-portal',
       createParticipantPortalRoutes(this.prisma, this.baileysService)
     );
+
+    // Group management routes
+    this.express.use('/api/groups/manage', createGroupManagementRoutes(this.prisma, this.authMiddleware));
 
     // Session routes
     this.express.post('/api/session/create-qr-code',
@@ -330,6 +350,9 @@ class App {
         membershipAdmin: context?.membershipAdmin,
         context
       });
+
+      // Enviar mensagem de boas-vindas para o grupo adequado
+      void this.sendNewMemberWelcomeUseCase.execute(groupId, participantId);
     });
 
     this.baileysService.onParticipantLeave((groupId, participants) => {

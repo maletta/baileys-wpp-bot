@@ -3,6 +3,7 @@ import { GroupWpp } from '@/domain/entities/GroupWpp';
 export interface IGroupWppRepository {
   findById(id: string): Promise<GroupWpp | null>;
   findByWhatsappRegistry(whatsappRegistry: string): Promise<GroupWpp | null>;
+  findByFormSlug(slug: string): Promise<GroupWpp | null>;
   findAll(): Promise<GroupWpp[]>;
   create(groupData: CreateGroupWppData): Promise<GroupWpp>;
   update(id: string, groupData: Partial<UpdateGroupWppData>): Promise<GroupWpp>;
@@ -20,6 +21,7 @@ export interface CreateGroupWppData {
   imageUrl?: string;
   notifyNewUserDetail?: boolean;
   onlyRegisteredUserMode?: boolean;
+  formSlug?: string;
 }
 
 export interface UpdateGroupWppData {
@@ -31,4 +33,5 @@ export interface UpdateGroupWppData {
   imageUrl?: string | null;
   notifyNewUserDetail?: boolean;
   onlyRegisteredUserMode?: boolean;
+  formSlug?: string | null;
 }

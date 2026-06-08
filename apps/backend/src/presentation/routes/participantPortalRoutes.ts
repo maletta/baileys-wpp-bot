@@ -13,6 +13,8 @@ import { ListParticipantPortalGroupsUseCase } from '@/application/use-cases/part
 import { GetParticipantPortalFormUseCase } from '@/application/use-cases/participantPortal/GetParticipantPortalFormUseCase';
 import { GetParticipantPortalFormPhotoUseCase } from '@/application/use-cases/participantPortal/GetParticipantPortalFormPhotoUseCase';
 import { UpsertParticipantPortalFormUseCase } from '@/application/use-cases/participantPortal/UpsertParticipantPortalFormUseCase';
+import { GroupWppRepository } from '@/infrastructure/repositories/GroupWppRepository';
+import { CommunityConfigRepository } from '@/infrastructure/repositories/CommunityConfigRepository';
 import type { IBaileysSocketService } from '@/domain/interfaces/services/IBaileysSocketService';
 import { logger } from '@/shared/utils/logger';
 
@@ -20,6 +22,7 @@ const portalFormBodySchema = z
   .object({
     participantId: z.string().min(8).max(40).optional(),
     idGroupWpp: z.string().min(8).max(40).optional(),
+    formSlug: z.string().min(2).max(80).optional(),
     sendFormMessageToGroup: z.preprocess(val => {
       if (typeof val === 'boolean') {
         return val;
@@ -40,8 +43,11 @@ const portalFormBodySchema = z
       .optional()
       .transform(v => (!v || v.trim() === '' ? null : v.trim())),
   })
-  .refine(d => !d.sendFormMessageToGroup || Boolean(d.idGroupWpp?.trim()), {
-    message: 'idGroupWpp é obrigatório quando sendFormMessageToGroup está ativo',
+  .refine(d => {
+    if (!d.sendFormMessageToGroup) return true;
+    return Boolean(d.idGroupWpp?.trim()) || Boolean(d.formSlug?.trim());
+  }, {
+    message: 'idGroupWpp ou formSlug é obrigatório quando sendFormMessageToGroup está ativo',
     path: ['idGroupWpp']
   });
 
@@ -86,7 +92,16 @@ export function createParticipantPortalRoutes(
   const listGroupsUseCase = new ListParticipantPortalGroupsUseCase(prisma);
   const getFormUseCase = new GetParticipantPortalFormUseCase(formRepo);
   const getFormPhotoUseCase = new GetParticipantPortalFormPhotoUseCase(formRepo, uploadRoot);
-  const upsertFormUseCase = new UpsertParticipantPortalFormUseCase(prisma, formRepo, baileys, uploadRoot);
+  const groupRepo = new GroupWppRepository(prisma);
+  const communityConfigRepo = new CommunityConfigRepository(prisma);
+  const upsertFormUseCase = new UpsertParticipantPortalFormUseCase(
+    prisma,
+    formRepo,
+    baileys,
+    uploadRoot,
+    groupRepo,
+    communityConfigRepo
+  );
 
   const controller = new ParticipantPortalController(
     listGroupsUseCase,

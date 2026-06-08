@@ -59,12 +59,12 @@ model ParticipantsWpp {
   updatedAt        DateTime @updatedAt
 
   // Relacionamentos
-  groupParticipations         ParticipantGroupWpp[]
-  userLinks                   ParticipantUserLink[]
-  registerTokens              ParticipantRegisterToken[]
-  forms                       ParticipantForm[]
-  temporaryAuthTokens         ParticipantTemporaryToken[]
-  anonymousMessagesMentioned  AnonymousMessageParticipant[]
+  groupParticipations        ParticipantGroupWpp[]
+  userLinks                  ParticipantUserLink[]
+  registerTokens             ParticipantRegisterToken[]
+  forms                      ParticipantForm[]
+  temporaryAuthTokens        ParticipantTemporaryToken[]
+  anonymousMessagesMentioned AnonymousMessageParticipant[]
 
   @@index([cellphone])
   @@map("participants_wpp")
@@ -83,14 +83,37 @@ model GroupsWpp {
   imageUrl               String?
   notifyNewUserDetail    Boolean  @default(true)
   onlyRegisteredUserMode Boolean  @default(true)
+  /// Slug amigável para link do formulário público (ex.: teste_baileys).
+  formSlug               String?  @unique
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
   // Relacionamentos
   participants      ParticipantGroupWpp[]
   anonymousMessages AnonymousMessage[]
+  communityConfig   CommunityConfig?      @relation("CommunityConfig_Community")
+  groupsAsNotif     CommunityConfig[]     @relation("CommunityConfig_NotifGroup")
 
   @@map("groups_wpp")
+}
+
+/// Configurações específicas de comunidades WhatsApp.
+/// Criado automaticamente na primeira descoberta da comunidade (via UpsertGroupFromBaileysUseCase).
+model CommunityConfig {
+  id                     String   @id @default(cuid())
+  /// FK → GroupsWpp da comunidade (1:1).
+  groupWppId             String   @unique
+  /// FK → GroupsWpp: grupo filho que recebe notificações (membro novo + formulário preenchido).
+  notificationGroupId    String?
+  /// Template de mensagem de boas-vindas (opcional, texto livre).
+  welcomeMessageTemplate String?  @db.Text
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  group             GroupsWpp  @relation("CommunityConfig_Community", fields: [groupWppId], references: [id])
+  notificationGroup GroupsWpp? @relation("CommunityConfig_NotifGroup", fields: [notificationGroupId], references: [id])
+
+  @@map("community_configs")
 }
 
 model ParticipantGroupWpp {
@@ -146,21 +169,21 @@ model ParticipantRegisterToken {
 
 /// Autorização por OTP enviada no WhatsApp, sem exigir `User` vinculado.
 model ParticipantTemporaryToken {
-  id                 String                         @id @default(cuid())
-  idParticipantWpp   String
-  type               ParticipantTemporaryTokenType
-  context            ParticipantAuthorizationContext
+  id               String                          @id @default(cuid())
+  idParticipantWpp String
+  type             ParticipantTemporaryTokenType
+  context          ParticipantAuthorizationContext
   /// Hash do código OTP (ex.: bcrypt); nunca armazenar o código em claro.
-  otpHash            String
-  consumedAt         DateTime?
+  otpHash          String
+  consumedAt       DateTime?
   /// Soft delete ao substituir token no reenvio ou revogação manual.
-  deletedAt          DateTime?
-  expiresAt          DateTime
+  deletedAt        DateTime?
+  expiresAt        DateTime
   /// Último envio via WhatsApp (anti-abuso / cooldown no reenvio).
-  lastSentAt         DateTime?
-  resendCount        Int                            @default(0)
-  createdAt          DateTime                       @default(now())
-  updatedAt          DateTime                       @updatedAt
+  lastSentAt       DateTime?
+  resendCount      Int                             @default(0)
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
 
   participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id], onDelete: Cascade)
 
@@ -171,7 +194,7 @@ model ParticipantTemporaryToken {
 
 model ParticipantForm {
   id                     String   @id @default(cuid())
-  idParticipantWpp       String     @unique
+  idParticipantWpp       String   @unique
   name                   String
   pronoun                String
   relationship           String
@@ -179,17 +202,17 @@ model ParticipantForm {
   location               String
   sexualOrientation      String
   /// Pergunta: «Qual seu rolê favorito?» (texto livre).
-  favoriteActivity       String     @default("")
+  favoriteActivity       String   @default("")
   instagram              String?
   /// Legado: caminho relativo em disco (ex. participant-forms/...). Vazio quando a foto está só em `photo`.
-  photoUrl               String     @default("")
+  photoUrl               String   @default("")
   /// Bytes da imagem (multipart → DB). Preferência em relação a `photoUrl` vazio.
   photo                  Bytes?
-  photoMimeType          String?    @db.VarChar(64)
+  photoMimeType          String?  @db.VarChar(64)
   /// Preferência persistida: enviar resumo do formulário ao grupo ao salvar.
-  sendFormMessageToGroup Boolean    @default(true)
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  sendFormMessageToGroup Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // Relacionamentos
   participant ParticipantsWpp @relation(fields: [idParticipantWpp], references: [id])

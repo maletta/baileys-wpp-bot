@@ -10,6 +10,7 @@ export class GroupWpp {
     public readonly imageUrl: string | null,
     public readonly notifyNewUserDetail: boolean,
     public readonly onlyRegisteredUserMode: boolean,
+    public readonly formSlug: string | null,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) { }

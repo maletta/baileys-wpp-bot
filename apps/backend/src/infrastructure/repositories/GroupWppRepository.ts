@@ -18,13 +18,14 @@ function mapRow(row: PrismaGroup): GroupWpp {
     row.imageUrl ?? null,
     row.notifyNewUserDetail,
     row.onlyRegisteredUserMode,
+    row.formSlug ?? null,
     row.createdAt,
     row.updatedAt
   );
 }
 
 export class GroupWppRepository implements IGroupWppRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   async findById(id: string): Promise<GroupWpp | null> {
     const row = await this.prisma.groupsWpp.findUnique({ where: { id } });
@@ -34,6 +35,13 @@ export class GroupWppRepository implements IGroupWppRepository {
   async findByWhatsappRegistry(whatsappRegistry: string): Promise<GroupWpp | null> {
     const row = await this.prisma.groupsWpp.findUnique({
       where: { whatsappRegistry }
+    });
+    return row ? mapRow(row) : null;
+  }
+
+  async findByFormSlug(slug: string): Promise<GroupWpp | null> {
+    const row = await this.prisma.groupsWpp.findUnique({
+      where: { formSlug: slug }
     });
     return row ? mapRow(row) : null;
   }
@@ -54,7 +62,8 @@ export class GroupWppRepository implements IGroupWppRepository {
         isCommunityAnnounce: groupData.isCommunityAnnounce ?? false,
         imageUrl: groupData.imageUrl ?? null,
         notifyNewUserDetail: groupData.notifyNewUserDetail ?? true,
-        onlyRegisteredUserMode: groupData.onlyRegisteredUserMode ?? true
+        onlyRegisteredUserMode: groupData.onlyRegisteredUserMode ?? true,
+        formSlug: groupData.formSlug ?? null
       }
     });
     return mapRow(row);
@@ -77,7 +86,8 @@ export class GroupWppRepository implements IGroupWppRepository {
         }),
         ...(groupData.onlyRegisteredUserMode !== undefined && {
           onlyRegisteredUserMode: groupData.onlyRegisteredUserMode
-        })
+        }),
+        ...(groupData.formSlug !== undefined && { formSlug: groupData.formSlug })
       }
     });
     return mapRow(row);

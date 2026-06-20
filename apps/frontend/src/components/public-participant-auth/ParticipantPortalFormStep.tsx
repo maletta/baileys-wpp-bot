@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import type { AxiosError } from 'axios';
-import { ArrowLeft, Camera, Users } from 'lucide-react';
+import { ArrowLeft, Camera, Users, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -111,12 +111,15 @@ function parseApiError(err: unknown): string {
 export interface ParticipantPortalFormStepProps {
   accessToken: string;
   onSignOut: () => void;
+  /** Slug do formulário (/formulario/SLUG) para auto-resolver o grupo de notificação. */
+  formSlug?: string;
 }
 
-export function ParticipantPortalFormStep({ accessToken, onSignOut }: ParticipantPortalFormStepProps) {
+export function ParticipantPortalFormStep({ accessToken, onSignOut, formSlug }: ParticipantPortalFormStepProps) {
   const onSignOutRef = useRef(onSignOut);
   onSignOutRef.current = onSignOut;
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [groups, setGroups] = useState<ParticipantPortalGroupRow[]>([]);
@@ -273,9 +276,15 @@ export function ParticipantPortalFormStep({ accessToken, onSignOut }: Participan
     if (ig) {
       fd.append('instagram', ig.startsWith('@') ? ig : `@${ig}`);
     }
-    fd.append('sendFormMessageToGroup', String(values.sendFormMessageToGroup));
-    if (values.sendFormMessageToGroup && values.idGroupWpp?.trim()) {
-      fd.append('idGroupWpp', values.idGroupWpp.trim());
+    // Quando há formSlug (URL /formulario/SLUG), envia o slug para resolução no backend
+    if (formSlug) {
+      fd.append('formSlug', formSlug);
+      fd.append('sendFormMessageToGroup', 'true');
+    } else {
+      fd.append('sendFormMessageToGroup', String(values.sendFormMessageToGroup));
+      if (values.sendFormMessageToGroup && values.idGroupWpp?.trim()) {
+        fd.append('idGroupWpp', values.idGroupWpp.trim());
+      }
     }
     if (values.photoFile) {
       fd.append('photo', values.photoFile);
@@ -351,40 +360,70 @@ export function ParticipantPortalFormStep({ accessToken, onSignOut }: Participan
         Sair e usar outro número
       </button>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-start">
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
         <div className="flex flex-col items-center gap-2">
-          <Avatar className="h-24 w-24 rounded-xl border border-border">
-            {previewUrl ? <AvatarImage src={previewUrl} alt="Foto" className="object-cover" /> : null}
-            <AvatarFallback className="rounded-xl">
-              <Camera className="h-8 w-8 text-muted-foreground" />
-            </AvatarFallback>
-          </Avatar>
-          <label className="cursor-pointer">
-            <span className="text-xs text-primary hover:underline">{formDto.exists ? 'Alterar foto' : 'Escolher foto'}</span>
-            <Controller
-              name="photoFile"
-              control={control}
-              render={({ field }) => (
+          <Controller
+            name="photoFile"
+            control={control}
+            render={({ field }) => (
+              <>
+                {/* Input file oculto */}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
                   className="sr-only"
-                  onChange={e => {
-                    const f = e.target.files?.[0];
-                    field.onChange(f);
+                  ref={(e) => {
+                    field.ref(e);
+                    (fileInputRef as React.MutableRefObject<HTMLInputElement | null>).current = e;
                   }}
-                  ref={field.ref}
+                  onChange={e => {
+                    field.onChange(e.target.files?.[0]);
+                  }}
                 />
-              )}
-            />
-          </label>
+
+                {/* Avatar clicável com overlay de câmera */}
+                <label className="relative cursor-pointer group block"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Avatar className="h-28 w-28 rounded-2xl border-2 border-border group-active:scale-95 transition-transform duration-150">
+                    {previewUrl ? (
+                      <AvatarImage src={previewUrl} alt="Foto" className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="rounded-2xl bg-gradient-to-br from-muted to-muted/50">
+                      <Camera className="h-10 w-10 text-muted-foreground/40" />
+                    </AvatarFallback>
+                  </Avatar>
+
+                  {/* Overlay escuro + ícone de câmera no hover/toque */}
+                  <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200">
+                    <Camera className="h-8 w-8 text-white drop-shadow-md" />
+                  </div>
+                </label>
+              </>
+            )}
+          />
+
+          {/* Botão tappable abaixo do avatar */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 min-w-[120px] text-xs gap-1.5"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {formDto.exists ? 'Alterar foto' : 'Escolher foto'}
+          </Button>
+
           {formState.errors.photoFile && (
             <p className="text-xs text-destructive text-center max-w-[140px]">{formState.errors.photoFile.message}</p>
           )}
         </div>
 
-        <p className="text-sm text-muted-foreground flex-1">
-          Complete os dados como aparecem no grupo. Na primeira vez é <span className="font-medium text-foreground">obrigatória</span>{' '}
+        <p className="text-sm text-muted-foreground flex-1 text-center sm:text-left">
+          Complete os dados como aparecem no grupo. Na primeira vez é{' '}
+          <span className="font-medium text-foreground">obrigatória</span>{' '}
           uma foto (JPG, PNG ou WebP, até 5&nbsp;MB).
         </p>
       </div>
@@ -476,7 +515,7 @@ export function ParticipantPortalFormStep({ accessToken, onSignOut }: Participan
             </label>
             <div className="flex rounded-md border border-input shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring">
               <span className="flex items-center px-3 text-xs text-muted-foreground bg-muted/40 border-r border-input whitespace-nowrap">
-                instagram.com/
+                @
               </span>
               <Input id="pf-ig" className="border-0 rounded-none focus-visible:ring-0" {...register('instagramHandle')} />
             </div>
@@ -484,81 +523,6 @@ export function ParticipantPortalFormStep({ accessToken, onSignOut }: Participan
               <p className="text-xs text-destructive">{formState.errors.instagramHandle.message}</p>
             )}
           </div>
-        </div>
-
-        <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/20">
-          <div className="flex items-start gap-3">
-            <Users className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="space-y-1 flex-1 min-w-0">
-              <p className="text-sm font-medium">Grupo para o resumo no WhatsApp</p>
-              <p className="text-xs text-muted-foreground">
-                Se ativar o envio, escolha um grupo onde você é membro. O backend confirma a participação antes de enviar.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="pf-group" className="text-sm font-medium">
-              Grupo
-            </label>
-            <select
-              id="pf-group"
-              className={selectClassName}
-              disabled={noGroups}
-              {...register('idGroupWpp')}
-            >
-              <option value="">{noGroups ? 'Sem grupos disponíveis' : 'Selecione…'}</option>
-              {groups.map(g => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            {formState.errors.idGroupWpp && (
-              <p className="text-xs text-destructive">{formState.errors.idGroupWpp.message}</p>
-            )}
-          </div>
-
-          {selectedGroup && (
-            <div className="flex gap-3 rounded-lg border border-border bg-background p-3 text-sm">
-              <Avatar className="h-12 w-12 rounded-lg shrink-0">
-                {resolveGroupImageSrc(selectedGroup) ? (
-                  <AvatarImage src={resolveGroupImageSrc(selectedGroup)!} alt="" className="object-cover" />
-                ) : null}
-                <AvatarFallback className="rounded-lg text-xs">{selectedGroup.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="font-medium truncate">{selectedGroup.name}</p>
-                {selectedGroup.description ? (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{selectedGroup.description}</p>
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          <Controller
-            name="sendFormMessageToGroup"
-            control={control}
-            render={({ field }) => (
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-input"
-                  checked={field.value}
-                  disabled={sendDisabled}
-                  onChange={e => field.onChange(e.target.checked)}
-                />
-                <span className="text-sm">
-                  Enviar mensagem com o resumo ao grupo ao guardar
-                  {sendDisabled ? (
-                    <span className="block text-xs text-muted-foreground mt-0.5">
-                      Indisponível: não há grupos associados à sua conta.
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            )}
-          />
         </div>
 
         <Button type="submit" className="w-full" size="lg" loading={saving}>

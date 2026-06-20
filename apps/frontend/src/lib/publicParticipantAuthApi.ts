@@ -61,16 +61,16 @@ export async function postVerifyOtp(body: VerifyOtpPayload): Promise<VerifyOtpRe
 
 export type ParticipantPortalSessionResponse =
   | {
-      ok: true;
-      authMode: 'participant_otp';
-      participantIds: [string];
-    }
+    ok: true;
+    authMode: 'participant_otp';
+    participantIds: [string];
+  }
   | {
-      ok: true;
-      authMode: 'google';
-      participantIds: string[];
-      user: { id: string; email: string; role: string };
-    };
+    ok: true;
+    authMode: 'google';
+    participantIds: string[];
+    user: { id: string; email: string; role: string };
+  };
 
 export async function getParticipantPortalSession(accessToken: string): Promise<ParticipantPortalSessionResponse> {
   const { data } = await client.get<ParticipantPortalSessionResponse>('/participant-portal/session', {
@@ -171,4 +171,44 @@ export function getResend429RetryAfter(err: unknown): number | undefined {
   }
   const sec = ax.response.data?.retryAfterSec;
   return typeof sec === 'number' && sec > 0 ? sec : undefined;
+}
+
+// ---- Form Slug ----
+
+export interface FormSlugGroupInfo {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  whatsappRegistry: string;
+  isCommunity: boolean;
+  notificationGroupId: string | null;
+}
+
+export interface FormSlugResponse {
+  valid: boolean;
+  group?: FormSlugGroupInfo;
+  error?: string;
+}
+
+let formSlugCache: FormSlugResponse | null = null;
+let formSlugCacheSlug: string | null = null;
+
+export async function validateFormSlug(slug: string): Promise<FormSlugResponse> {
+  if (formSlugCache && formSlugCacheSlug === slug) {
+    return formSlugCache;
+  }
+  try {
+    const { data } = await client.get<FormSlugResponse>(`/public/form-slug/${encodeURIComponent(slug)}`);
+    formSlugCache = data;
+    formSlugCacheSlug = slug;
+    return data;
+  } catch (error) {
+    const ax = error as AxiosError<{ error?: string }>;
+    return { valid: false, error: ax.response?.data?.error || 'Erro ao validar slug' };
+  }
+}
+
+export function clearFormSlugCache(): void {
+  formSlugCache = null;
+  formSlugCacheSlug = null;
 }

@@ -64,6 +64,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return;
         }
 
+        // Para JWT de phone dashboard (authKind: phone_dashboard), não chama /profile
+        // pois não há User correspondente na tabela users — só ParticipantsWpp
+        let isPhoneToken = false;
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          isPhoneToken = payload.authKind === 'phone_dashboard';
+        } catch {
+          // Token inválido ou Google JWT padrão
+        }
+
+        if (isPhoneToken) {
+          // Phone user: usa dados locais sem validar com backend
+          setUser(savedUser);
+          setIsLoading(false);
+          return;
+        }
+
         try {
           const profile = await api.getProfile({ timeoutMs: PROFILE_BOOTSTRAP_TIMEOUT_MS });
           setUser(profile.user);

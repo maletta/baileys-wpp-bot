@@ -1,3 +1,5 @@
+import { UserRole } from './User';
+
 export class ParticipantWpp {
   constructor(
     public readonly id: string,
@@ -6,7 +8,8 @@ export class ParticipantWpp {
     public readonly jid: string | null,
     public readonly lid: string | null,
     public readonly infoName: string | null,
+    public readonly role: UserRole,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
-  ) {}
+  ) { }
 }

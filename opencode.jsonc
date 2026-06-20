@@ -1,0 +1,68 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Modelo padrão: DeepSeek v4 Pro
+  "model": "deepseek/deepseek-chat",
+  // Instruções adicionais do Cursor Rules (complementam o AGENTS.md)
+  "instructions": [
+    ".cursor/rules/node-backend.mdc",
+    ".cursor/rules/react-components.mdc",
+    ".cursor/rules/security.mdc",
+    ".cursor/rules/testing.mdc",
+    ".cursor/rules/ai-models.mdc",
+    "docs/architecture.md",
+    "docs/overview.md"
+  ],
+  // Permissões: pedir confirmação em operações críticas
+  "permission": {
+    "edit": "ask",
+    "bash": "ask",
+    "write": "ask"
+  },
+  // Comandos customizados para tarefas comuns do projeto
+  "command": {
+    "lint": {
+      "template": "Run npm run lint across backend and frontend workspaces.\nIf there are errors, fix them and re-run until clean.\nAfter lint passes, run npm run type-check.",
+      "description": "Lint e type-check em todos os workspaces",
+      "agent": "build"
+    },
+    "type-check": {
+      "template": "Run npm run type-check across backend and frontend workspaces.\nUse tsc --noEmit in each workspace. Fix any type errors found.",
+      "description": "Verificação de tipos TypeScript em ambos apps",
+      "agent": "build"
+    },
+    "test": {
+      "template": "Run the test suite: npm test in the relevant workspace.\nFirst identify which workspace to test based on changes.\nRun with coverage if possible. Show failures and suggest fixes.",
+      "description": "Executa testes com cobertura",
+      "agent": "build"
+    },
+    "db-push": {
+      "template": "Run npm run db:generate and then npm run db:push to sync the Prisma schema with PostgreSQL.\nReview any schema changes before pushing.",
+      "description": "Sincroniza schema Prisma com PostgreSQL",
+      "agent": "build"
+    },
+    "dev": {
+      "template": "Run npm run dev to start backend (4444) + frontend (3333).\nCheck that both services start without errors.\nReport any compilation or runtime issues.",
+      "description": "Inicia servidor de desenvolvimento",
+      "agent": "build"
+    },
+    "check-merge": {
+      "template": "Run the pre-merge checklist for WhatsApp/Baileys core code:\n1. Run npm run type-check and npm run lint\n2. Verify reconnection logic is intact\n3. Check event deduplication\n4. Verify rate limiting on sends\n5. Ensure no sensitive data in logs or responses\nReport pass/fail for each item.",
+      "description": "Checklist pré-merge para código WhatsApp core",
+      "agent": "plan"
+    }
+  },
+  // Formatação de código
+  "formatter": {
+    "prettier": {}
+  },
+  // Watcher: ignorar diretórios de build e node_modules
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "dist/**",
+      ".next/**",
+      "sessions/**",
+      ".active-session"
+    ]
+  }
+}

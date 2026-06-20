@@ -55,6 +55,8 @@ model ParticipantsWpp {
   jid              String?
   lid              String?
   infoName         String?
+  /// Role do participante para acesso ao dashboard (default: MEMBER).
+  role             UserRole @default(MEMBER)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -68,6 +70,22 @@ model ParticipantsWpp {
 
   @@index([cellphone])
   @@map("participants_wpp")
+}
+
+/// Token de registro para novos participantes (fluxo Flow 2).
+/// Criado quando o telefone não existe em ParticipantsWpp.
+/// O usuário envia o token via WhatsApp para o bot, que o processa.
+model PendingRegistration {
+  id              String    @id @default(cuid())
+  cellphoneDigits String
+  token           String    @unique
+  consumedAt      DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+
+  @@index([cellphoneDigits])
+  @@index([token])
+  @@map("pending_registrations")
 }
 
 model GroupsWpp {

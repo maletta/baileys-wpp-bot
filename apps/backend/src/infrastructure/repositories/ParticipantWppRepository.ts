@@ -1,4 +1,4 @@
-import { PrismaClient, ParticipantsWpp as PrismaParticipant } from '@prisma/client';
+import { PrismaClient, ParticipantsWpp as PrismaParticipant, UserRole } from '@prisma/client';
 import { ParticipantWpp } from '@/domain/entities/ParticipantWpp';
 import {
   CreateParticipantWppData,
@@ -14,13 +14,14 @@ function mapRow(row: PrismaParticipant): ParticipantWpp {
     row.jid ?? null,
     row.lid ?? null,
     row.infoName ?? null,
+    row.role as any,
     row.createdAt,
     row.updatedAt
   );
 }
 
 export class ParticipantWppRepository implements IParticipantWppRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   async findByWhatsappRegistry(whatsappRegistry: string): Promise<ParticipantWpp | null> {
     const row = await this.prisma.participantsWpp.findUnique({
@@ -43,20 +44,23 @@ export class ParticipantWppRepository implements IParticipantWppRepository {
         cellphone: data.cellphone,
         jid: data.jid ?? null,
         lid: data.lid ?? null,
-        infoName: data.infoName ?? null
+        infoName: data.infoName ?? null,
+        role: (data.role as UserRole) ?? UserRole.MEMBER
       }
     });
     return mapRow(row);
   }
 
   async update(id: string, data: Partial<UpdateParticipantWppData>): Promise<ParticipantWpp> {
+    const updateData: Record<string, unknown> = {};
+    if (data.jid !== undefined) updateData.jid = data.jid;
+    if (data.lid !== undefined) updateData.lid = data.lid;
+    if (data.infoName !== undefined) updateData.infoName = data.infoName;
+    if (data.role !== undefined) updateData.role = data.role as UserRole;
+
     const row = await this.prisma.participantsWpp.update({
       where: { id },
-      data: {
-        ...(data.jid !== undefined && { jid: data.jid }),
-        ...(data.lid !== undefined && { lid: data.lid }),
-        ...(data.infoName !== undefined && { infoName: data.infoName })
-      }
+      data: updateData
     });
     return mapRow(row);
   }

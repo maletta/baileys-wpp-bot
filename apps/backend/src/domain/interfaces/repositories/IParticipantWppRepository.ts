@@ -6,12 +6,14 @@ export interface CreateParticipantWppData {
   jid?: string | null;
   lid?: string | null;
   infoName?: string | null;
+  role?: string;
 }
 
 export interface UpdateParticipantWppData {
   jid?: string | null;
   lid?: string | null;
   infoName?: string | null;
+  role?: string;
 }
 
 export interface IParticipantWppRepository {

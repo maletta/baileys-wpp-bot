@@ -19,7 +19,8 @@ export class GroupManagementController {
   async listManageable(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
-      if (!userId) {
+      const participantId = req.participantId;
+      if (!userId && !participantId) {
         res.status(401).json({ error: 'Unauthorized', message: 'Usuário não autenticado' });
         return;
       }
@@ -29,11 +30,15 @@ export class GroupManagementController {
         where: {
           admin: true,
           deleted: false,
-          participant: {
-            userLinks: {
-              some: { idUser: userId }
-            }
-          }
+          ...(participantId
+            ? { idParticipantWpp: participantId }
+            : {
+              participant: {
+                userLinks: {
+                  some: { idUser: userId }
+                }
+              }
+            })
         },
         include: {
           group: true

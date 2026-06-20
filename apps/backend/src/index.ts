@@ -42,6 +42,7 @@ import { createPublicParticipantAuthRoutes } from '@/presentation/routes/publicP
 import { createParticipantPortalRoutes } from '@/presentation/routes/participantPortalRoutes';
 import { createFormSlugRoutes } from '@/presentation/routes/formSlugRoutes';
 import { createGroupManagementRoutes } from '@/presentation/routes/groupManagementRoutes';
+import { createPhoneAuthRoutes } from '@/presentation/routes/phoneAuthRoutes';
 
 // Import shared
 import { logger } from '@/shared/utils/logger';
@@ -222,6 +223,7 @@ class App {
 
     // Auth routes
     this.express.use('/api/auth', createAuthRoutes(this.prisma));
+    this.express.use('/api/auth/phone', createPhoneAuthRoutes(this.prisma, this.baileysService));
 
     // Participante — OTP público (formulário sem Google)
     this.express.use(

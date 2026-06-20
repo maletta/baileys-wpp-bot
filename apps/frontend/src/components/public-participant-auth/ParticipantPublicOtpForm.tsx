@@ -36,7 +36,12 @@ function onlyDigits(value: string): string {
 
 type Step = 'phone' | 'otp' | 'form';
 
-export function ParticipantPublicOtpForm() {
+export interface ParticipantPublicOtpFormProps {
+  /** Slug do formulário (/formulario/SLUG) para auto-resolver o grupo de notificação. */
+  formSlug?: string;
+}
+
+export function ParticipantPublicOtpForm({ formSlug }: ParticipantPublicOtpFormProps) {
   const [sessionReady, setSessionReady] = useState(false);
   const [step, setStep] = useState<Step>('phone');
   const [portalToken, setPortalToken] = useState<string | null>(null);
@@ -370,7 +375,7 @@ export function ParticipantPublicOtpForm() {
         )}
 
         {step === 'form' && portalToken && (
-          <ParticipantPortalFormStep accessToken={portalToken} onSignOut={handleParticipantSignOut} />
+          <ParticipantPortalFormStep accessToken={portalToken} onSignOut={handleParticipantSignOut} formSlug={formSlug} />
         )}
       </Card>
 

@@ -3,12 +3,16 @@ import jwt from 'jsonwebtoken';
 import { IUserRepository } from '@/domain/interfaces/repositories/IUserRepository';
 import { logger } from '@/shared/utils/logger';
 
+const PARTICIPANT_SECRET = process.env.JWT_PARTICIPANT_SECRET || process.env.JWT_SECRET || 'development-participant-jwt';
+
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
     role: string;
   };
+  /** Presente quando auth via phone dashboard JWT. */
+  participantId?: string;
 }
 
 export class AuthMiddleware {
@@ -29,9 +33,26 @@ export class AuthMiddleware {
         return;
       }
 
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      const token = authHeader.substring(7);
 
-      // Verify JWT token
+      // Tenta JWT de phone dashboard primeiro (authKind: phone_dashboard)
+      try {
+        const phoneDecoded = jwt.verify(token, PARTICIPANT_SECRET) as any;
+        if (phoneDecoded.authKind === 'phone_dashboard' && phoneDecoded.participantId) {
+          req.user = {
+            id: phoneDecoded.participantId,
+            email: '',
+            role: phoneDecoded.role || 'MEMBER'
+          };
+          req.participantId = phoneDecoded.participantId;
+          next();
+          return;
+        }
+      } catch {
+        // Não é JWT de phone, continua para tentar Google JWT
+      }
+
+      // Tenta JWT Google
       const decoded = jwt.verify(token, this.jwtSecret) as any;
 
       if (!decoded.userId) {
@@ -42,7 +63,6 @@ export class AuthMiddleware {
         return;
       }
 
-      // Get user from database
       const user = await this.userRepository.findById(decoded.userId);
 
       if (!user) {
@@ -53,7 +73,6 @@ export class AuthMiddleware {
         return;
       }
 
-      // Add user info to request
       req.user = {
         id: user.id,
         email: user.email,
@@ -79,7 +98,7 @@ export class AuthMiddleware {
     }
   };
 
-  requireRole = (requiredRoles: string[]) => {
+  requireRole = (allowedRoles: string[]) => {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
       if (!req.user) {
         res.status(401).json({
@@ -89,10 +108,10 @@ export class AuthMiddleware {
         return;
       }
 
-      if (!requiredRoles.includes(req.user.role)) {
+      if (!allowedRoles.includes(req.user.role)) {
         res.status(403).json({
           error: 'Forbidden',
-          message: 'Permissão insuficiente'
+          message: 'Permissão negada'
         });
         return;
       }

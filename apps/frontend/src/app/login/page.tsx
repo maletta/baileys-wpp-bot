@@ -1,234 +1,238 @@
 'use client';
 
-import { useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
-import { useAuth } from '@/hooks/useAuth';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { MessageSquare, ArrowRight, Loader2, AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { storage } from '@/lib/utils';
 import {
-  Loader2,
-  MessageSquare,
-  Shield,
-  Zap,
-  Users,
-  CheckCircle2
-} from 'lucide-react';
+  formatPhoneNumberIntl,
+  isValidPhoneNumber
+} from 'react-phone-number-input';
+import { ParticipantWhatsAppPhoneInput } from '@/components/public-participant-auth/ParticipantWhatsAppPhoneInput';
+import type { Value as E164PhoneValue } from 'react-phone-number-input';
 
-export default function LoginPage() {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4444/api';
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+type Step = 'phone' | 'loading' | 'otp' | 'registration';
+
+export default function PhoneLoginPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const [step, setStep] = useState<Step>('phone');
+  const [phoneE164, setPhoneE164] = useState<E164PhoneValue | undefined>(undefined);
+  const [otp, setOtp] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [regToken, setRegToken] = useState<string | null>(null);
+  const [waLink, setWaLink] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+  const cellphoneDigits = phoneE164 && isValidPhoneNumber(phoneE164) ? onlyDigits(phoneE164) : null;
+  const phoneValid = cellphoneDigits && cellphoneDigits.length >= 10 && cellphoneDigits.length <= 15;
+  const otpValid = /^\d{6}$/.test(otp);
+
+  // Cleanup polling on unmount
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.push('/dashboard');
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const startPolling = useCallback((token: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/phone/register-status/${token}`);
+        const data = await res.json();
+
+        if (data.done && data.participantId) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setParticipantId(data.participantId);
+          setStep('otp');
+          toast({ title: 'Registro concluído!', description: 'Digite o código enviado no seu WhatsApp.' });
+        } else if (data.expired) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          toast({ variant: 'destructive', title: 'Token expirou', description: 'Solicite um novo código.' });
+          setStep('phone');
+        }
+      } catch {
+        // Silently retry
+      }
+    }, 3000);
+  }, []);
+
+  const handleInitiate = async () => {
+    if (!phoneValid || !cellphoneDigits || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/phone/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cellphone: cellphoneDigits })
+      });
+      const data = await res.json();
+
+      if (data.flow === 'otp') {
+        setParticipantId(data.participantId);
+        setStep('otp');
+        toast({ title: 'Código enviado', description: 'Verifique seu WhatsApp.' });
+      } else if (data.flow === 'registration') {
+        setRegToken(data.token);
+        setWaLink(data.waLink);
+        setStep('registration');
+        startPolling(data.token);
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível conectar ao servidor.' });
+    } finally {
+      setLoading(false);
     }
-  }, [isAuthenticated, isLoading, router]);
-
-  const handleLoginSuccess = () => {
-    router.push('/dashboard');
   };
 
-  const handleLoginError = (error: string) => {
-    console.error('Erro no login:', error);
+  const handleVerifyOtp = async () => {
+    if (!otpValid || !participantId || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/phone/verify-phone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId, otp })
+      });
+      const data = await res.json();
+
+      if (data.accessToken) {
+        storage.set('accessToken', data.accessToken);
+        storage.set('user', { id: data.participantId, role: data.role });
+        toast({ title: 'Login realizado!' });
+        window.location.href = '/dashboard';
+      } else {
+        toast({ variant: 'destructive', title: 'Código inválido', description: 'Tente novamente.' });
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível verificar o código.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10">
-        <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <span className="text-lg font-medium text-muted-foreground">Carregando...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10">
-        <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <span className="text-lg font-medium text-muted-foreground">Redirecionando...</span>
-        </div>
-      </div>
-    );
-  }
+  const phoneDisplay = phoneE164 && isValidPhoneNumber(phoneE164)
+    ? formatPhoneNumberIntl(phoneE164)
+    : cellphoneDigits || '';
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Branding & Features */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-accent to-primary/80 p-12 flex-col justify-between text-white relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl animate-float" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl animate-float" style={{ animationDelay: '3s' }} />
-        </div>
-
-        {/* Content */}
-        <div className="relative z-10">
-          {/* Logo */}
-          <div className="flex items-center space-x-3 mb-16 animate-fade-in-left">
-            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <MessageSquare className="h-7 w-7" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">WhatsApp Baileys</h1>
-              <p className="text-white/80 text-sm">Sistema de Gerenciamento</p>
-            </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 px-6">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground mb-2">
+            <MessageSquare className="h-6 w-6" />
           </div>
-
-          {/* Features */}
-          <div className="space-y-8 animate-fade-in-left" style={{ animationDelay: '0.2s' }}>
-            <div>
-              <h2 className="text-4xl font-bold mb-4 leading-tight">
-                Gerencie seu WhatsApp de forma profissional
-              </h2>
-              <p className="text-white/90 text-lg">
-                Conecte, gerencie grupos e envie mensagens com segurança e eficiência.
-              </p>
-            </div>
-
-            <div className="space-y-4 animate-fade-in-left" style={{ animationDelay: '0.4s' }}>
-              <FeatureItem
-                icon={<Shield className="h-5 w-5" />}
-                title="Seguro e Confiável"
-                description="Autenticação via Google OAuth 2.0"
-              />
-              <FeatureItem
-                icon={<Zap className="h-5 w-5" />}
-                title="Rápido e Eficiente"
-                description="Interface moderna e responsiva"
-              />
-              <FeatureItem
-                icon={<Users className="h-5 w-5" />}
-                title="Gerenciamento de Grupos"
-                description="Controle total sobre seus grupos"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="relative z-10">
-          <p className="text-white/60 text-sm">
-            © 2024 WhatsApp Baileys. Todos os direitos reservados.
+          <h1 className="text-2xl font-bold">Acessar Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Entre com seu número do WhatsApp
           </p>
         </div>
-      </div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-md space-y-8 animate-fade-in-right">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center space-x-3 mb-8 animate-scale-in">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <MessageSquare className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">WhatsApp Baileys</h1>
-            </div>
-          </div>
-
-          {/* Welcome Text */}
-          <div className="text-center space-y-2 animate-fade-in-up">
-            <h2 className="text-3xl font-bold tracking-tight">Bem-vindo de volta!</h2>
-            <p className="text-muted-foreground">
-              Entre com sua conta Google para acessar o sistema
-            </p>
-          </div>
-
-          {/* Login Card */}
-          <div className="bg-card border rounded-2xl p-8 shadow-lg space-y-6 animate-scale-in hover:shadow-xl transition-shadow duration-300" style={{ animationDelay: '0.2s' }}>
-            <GoogleLoginButton
-              onSuccess={handleLoginSuccess}
-              onError={handleLoginError}
-            />
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
+        <Card className="rounded-2xl p-6 shadow-lg space-y-5">
+          {step === 'phone' && (
+            <>
+              <div className="space-y-2" onKeyDown={(e) => { if (e.key === 'Enter' && phoneValid && !loading) handleInitiate(); }}>
+                <label className="text-sm font-medium">Número do WhatsApp</label>
+                <ParticipantWhatsAppPhoneInput
+                  value={phoneE164}
+                  onChange={setPhoneE164}
+                />
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Acesso seguro via Google
-                </span>
+              <Button className="w-full" size="lg" loading={loading} disabled={!phoneValid} onClick={handleInitiate}>
+                Enviar código
+              </Button>
+            </>
+          )}
+
+          {step === 'registration' && (
+            <>
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+                <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                <p className="text-sm">Aguardando confirmação...</p>
               </div>
-            </div>
 
-            {/* Security Badge */}
-            <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground">
-              <Shield className="h-4 w-4 text-success" />
-              <span>Conexão criptografada e segura</span>
-            </div>
-          </div>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground text-center">
+                  Envie a mensagem abaixo para o bot no WhatsApp
+                </p>
+                {waLink && (
+                  <a
+                    href={waLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#25D366] text-white font-medium hover:bg-[#20BD5A] transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Enviar mensagem no WhatsApp
+                  </a>
+                )}
+                <p className="text-xs text-center text-muted-foreground">
+                  Token: <code className="bg-muted px-1 py-0.5 rounded text-xs">{regToken}</code>
+                </p>
+              </div>
 
-          {/* Benefits */}
-          <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            <p className="text-sm font-medium text-center text-muted-foreground">
-              Por que usar o WhatsApp Baileys?
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              <BenefitItem text="Gerencie múltiplas conexões WhatsApp" />
-              <BenefitItem text="Envie mensagens para grupos e contatos" />
-              <BenefitItem text="Interface intuitiva e moderna" />
-            </div>
-          </div>
+              <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => { setStep('phone'); if (pollingRef.current) clearInterval(pollingRef.current); }}>
+                Cancelar e tentar outro número
+              </Button>
+            </>
+          )}
 
-          {/* Terms */}
-          <p className="text-center text-xs text-muted-foreground px-8">
-            Ao fazer login, você concorda com nossos{' '}
-            <a href="#" className="text-primary hover:underline font-medium">
-              Termos de Serviço
-            </a>{' '}
-            e{' '}
-            <a href="#" className="text-primary hover:underline font-medium">
-              Política de Privacidade
-            </a>
-          </p>
+          {step === 'otp' && (
+            <>
+              <div className="space-y-2"
+                onKeyDown={(e) => { if (e.key === 'Enter' && otpValid && !loading) handleVerifyOtp(); }}
+              >
+                <label className="text-sm font-medium">Código de 6 dígitos</label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otp}
+                  onChange={e => {
+                    const newOtp = onlyDigits(e.target.value).slice(0, 6);
+                    setOtp(newOtp);
+                    // Auto-submit when all 6 digits are typed
+                    if (newOtp.length === 6 && participantId && !loading) {
+                      setTimeout(() => handleVerifyOtp(), 150);
+                    }
+                  }}
+                  className="text-center text-lg tracking-[0.4em] font-medium tabular-nums"
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  Enviamos para {phoneDisplay}
+                </p>
+              </div>
+              <Button className="w-full" size="lg" loading={loading} disabled={!otpValid} onClick={handleVerifyOtp}>
+                Entrar
+              </Button>
+              <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setStep('phone')}>
+                Alterar número
+              </Button>
+            </>
+          )}
+        </Card>
 
-          {/* Help Link */}
-          <p className="text-center text-sm text-muted-foreground">
-            Participante do grupo?{' '}
-            <Link href="/formulario" className="text-primary hover:underline font-medium">
-              Acesso ao formulário
-            </Link>
-            {' · '}
-            Precisa de ajuda?{' '}
-            <a href="#" className="text-primary hover:underline font-medium">
-              Entre em contato
-            </a>
-          </p>
+        <div className="text-center">
+          <Link href="/login/google" className="text-xs text-muted-foreground hover:text-primary underline">
+            Acesso administrativo com Google
+          </Link>
         </div>
       </div>
-    </div>
-  );
-}
-
-interface FeatureItemProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}
-
-function FeatureItem({ icon, title, description }: FeatureItemProps) {
-  return (
-    <div className="flex items-start space-x-3">
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
-        {icon}
-      </div>
-      <div className="flex-1">
-        <h3 className="font-semibold text-white">{title}</h3>
-        <p className="text-sm text-white/80">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-function BenefitItem({ text }: { text: string }) {
-  return (
-    <div className="flex items-center space-x-2 text-sm">
-      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-      <span className="text-muted-foreground">{text}</span>
     </div>
   );
 }
